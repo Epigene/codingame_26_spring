@@ -5,7 +5,7 @@
 #
 # Initialization gives you an empty grid. Use #add_cell to populate the grid. By default the new
 # cell will be connected to all four neighbour cells and . Use kwargs to :except or :only needed connections.
-# Use `add_cell( trim_excess: false)` to opt out of 'outside bounds auto-trim'
+# Use `add_cell(trim_excess: false)` to opt out of 'outside bounds auto-trim'
 class Grid
   # Key data storage.
   # Each key is a node (key == name),
@@ -67,7 +67,7 @@ class Grid
     duplicate
   end
 
-  # A shorthand access to underlying has node structure
+  # A shorthand access to underlying node structure
   def [](node)
     structure[node]
   end
@@ -78,10 +78,10 @@ class Grid
 
   # adds a new cell node. By default all 4 neighbors, but kwars allow tweaking that.
   #
-  # @param point Point
+  # @param node String#x#y
   # @param except Array<neighbor>
   # @param only Array<neighbor>
-  def add_cell(point, except: nil, only: nil, auto_trim: true)
+  def add_cell(node, except: nil, only: nil, auto_trim: true)
     raise ArgumentError.new("Only one of :except or :only kwards is supported") if !except.nil? && !only.nil?
 
     neighbors = NEIGHBORS.dup
@@ -94,15 +94,15 @@ class Grid
 
     raise ArgumentError.new(":except/:only use made a cell have no neighbors") if neighbors.none?
 
-    structure[point] ||= Set.new
+    structure[node] ||= Set.new
 
     neighbors.each do |neighbor|
-      neighbor = "#{point.x + neighbor.first} #{point.y + neighbor.last}"
+      neighbor = "#{node.x + neighbor.first} #{node.y + neighbor.last}"
 
       next if auto_trim && cell_outside_norms?(neighbor)
 
-      structure[point] << neighbor
-      structure[neighbor] << point
+      structure[node] << neighbor
+      structure[neighbor] << node
     end
 
     nil
@@ -137,6 +137,15 @@ class Grid
 
     structure.delete(cell)
 
+    nil
+  end
+
+  # Removes one side of a possibly existing connection. Useful for creating one-way connections,
+  # such as:
+  #   1. "only able to leave camp, never return to it"
+  #   2. "trap, only able to step on it, never leave"
+  def remove_connection(from_node, to_node)
+    structure[from_node] -= [to_node]
     nil
   end
 
@@ -185,17 +194,17 @@ class Grid
   end
 
   # @return Integer
-  def manhattan_distance(pointA, pointB)
+  def manhattan_distance(nodeA, nodeB)
     @manhattan_distances ||= {}
-    key = "#{pointA}_#{pointB}"
-    @manhattan_distances[key] ||= (pointA.x - pointB.x).abs + (pointA.y - pointB.y).abs
+    key = "#{nodeA}_#{nodeB}"
+    @manhattan_distances[key] ||= (nodeA.x - nodeB.x).abs + (nodeA.y - nodeB.y).abs
   end
 
-  def manhattan_distance_from_mid(point)
-    closest_mid_x = width.odd? ? (width / 2) : ([(width / 2), (width / 2) - 1].sort_by { (point.x - _1).abs }.first)
-    closest_mid_y = height.odd? ? (height / 2) : ([(height / 2), (height / 2) - 1].sort_by { (point.y - _1).abs }.first)
+  def manhattan_distance_from_mid(node)
+    closest_mid_x = width.odd? ? (width / 2) : ([(width / 2), (width / 2) - 1].sort_by { (node.x - _1).abs }.first)
+    closest_mid_y = height.odd? ? (height / 2) : ([(height / 2), (height / 2) - 1].sort_by { (node.y - _1).abs }.first)
 
-    manhattan_distance(point, Point[closest_mid_x, closest_mid_y])
+    manhattan_distance(node, "#{closest_mid_x}_#{closest_mid_y}")
   end
 
   # @return Array<Coords>
@@ -225,7 +234,7 @@ class Grid
       x_coords.sort! # Sort x-coordinates in the row
       row_segments = []
 
-      current_segment = [Point[x_coords.first, y]]
+      current_segment = ["#{x_coords.first} #{y}"]
 
       x_coords.each_cons(2) do |a, b|
         if b == a.next
@@ -248,7 +257,7 @@ class Grid
   # Given an arena of known dimensions, we can split it in two horizontal halves (odd mid column gets excluded)
   # and ask for one of the halves.
   #
-  # @return Set<Point>
+  # @return Set<node>
   def horizontally_opposite_side_cells(from:)
     mid_x =
       if width.odd?
@@ -273,16 +282,16 @@ class Grid
   end
 
   # As in navigable neighbors # use #n8 to get just cell-geometry level data
-  def neighbors(point)
-    structure[point]
+  def neighbors(node)
+    structure[node]
   end
 
   # assumes no out-of bounds per width*height cells are present
-  # @return Array<String> # array of points
-  def n4(point)
+  # @return Array<Node> # array of node strings
+  def n4(node)
     NEIGHBORS.filter_map do |delta|
-      new_x = point.x + delta[0]
-      new_y = point.y + delta[1]
+      new_x = node.x + delta[0]
+      new_y = node.y + delta[1]
       n = "#{new_x} #{new_y}"
 
       next if cell_outside_norms?(n)
@@ -291,11 +300,11 @@ class Grid
   end
 
   # assumes no out-of bounds per width*height cells are present
-  # @return Array<String> # array of points
-  def n8(point)
+  # @return Array<String> # array of node strings
+  def n8(node)
     N8.filter_map do |delta|
-      new_x = point.x + delta[0]
-      new_y = point.y + delta[1]
+      new_x = node.x + delta[0]
+      new_y = node.y + delta[1]
       n = "#{new_x} #{new_y}"
 
       next if cell_outside_norms?(n)
@@ -308,9 +317,9 @@ class Grid
   #
   # @param range Range
   # @return Set
-  def cells_at_distance(point, range)
+  def cells_at_distance(node, range)
     visited = Set.new
-    queue = [[point, 0]] # Each element is [current_cell, current_distance]
+    queue = [[node, 0]] # Each element is [current_cell, current_distance]
     result = Set.new
 
     while queue.any?
@@ -338,32 +347,32 @@ class Grid
     result
   end
 
-  def cells_at_diagonal_distance(point, range)
+  def cells_at_diagonal_distance(node, range)
     diagonal_as_direct_ranges = range.map { (_1 * 2)..(_1 * 2) }
 
     cells_at_distances = diagonal_as_direct_ranges.map do |range|
-      cells_at_distance(point, range)
+      cells_at_distance(node, range)
     end.flatten.reduce { |a, b| a += b }
 
     cells_at_distances.reject do |cell|
-      cell.x == point.x || cell.y == point.y
+      cell.x == node.x || cell.y == node.y
     end.to_set
   end
 
   # Assumes points on at least same row/column. Tells the cardinal direction of the pair.
   # @return String # one of %w[N E S W]
-  def direction(point_a, point_b)
-    if point_a.x == point_b.x && point_a.y > point_b.y
+  def direction(node_a, node_b)
+    if node_a.x == node_b.x && node_a.y > node_b.y
       return "N"
-    elsif point_a.x == point_b.x && point_a.y < point_b.y
+    elsif node_a.x == node_b.x && node_a.y < node_b.y
       return "S"
-    elsif point_a.y == point_b.y && point_a.x > point_b.x
+    elsif node_a.y == node_b.y && node_a.x > node_b.x
       return "W"
-    elsif point_a.y == point_b.y && point_a.x < point_b.x
+    elsif node_a.y == node_b.y && node_a.x < node_b.x
       return "E"
     end
 
-    raise "Hmm, same points?"
+    raise "Hmm, same nodes?"
   end
 
   private

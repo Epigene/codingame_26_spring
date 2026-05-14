@@ -1,22 +1,41 @@
 debug "Game starts!"
 
 # game loop
+@turn = 0
 loop do
-  agent_count = gets.to_i # Total number of agents still in the game
-  agents = {}
-  agent_count.times do
-    # cooldown: Number of turns before this agent can shoot
-    # wetness: Damage (0-100) this agent has taken
-    line = gets
-    debug line
-    # agent_id, x, y, cooldown, splash_bombs, wetness = line.split.map { |x| x.to_i }
-    agent_id = line.split.first.to_i
-    agents[agent_id] = line
+  @turn += 1
+
+  lines = [
+    gets.chomp,
+    gets.chomp,
+    gets.chomp
+  ]
+
+  lines.last.to_i.times do
+    lines << gets.chomp
+    # type, x, y, size, health, fruits, cooldown = gets.split
+    # x = x.to_i
+    # y = y.to_i
+    # size = size.to_i
+    # health = health.to_i
+    # fruits = fruits.to_i
+    # cooldown = cooldown.to_i
+    # trees << Tree.new(type, x, y, size, health, fruits, cooldown)
   end
 
-  my_agent_count = gets.to_i # Number of alive agents controlled by you
+  # workers = []
+  # worker_count = gets.to_i
+  lines << gets.chomp
+  lines.last.to_i.times do
+    lines << gets.chomp
+    # id, player, x, y, movement_speed, carry_capacity, harvest_power, chop_power, carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood = gets.split.map { |x| x.to_i }
 
-  @controller.call(agent_update: agents, my_agent_count: my_agent_count).each do |move|
-    puts move
+    # workers << Worker.new(
+    #   id, player, x, y,
+    #   movement_speed, carry_capacity, harvest_power, chop_power,
+    #   carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood
+    # )
   end
+
+  puts @controller.call(turn: @turn, input: lines.join("\n"))
 end

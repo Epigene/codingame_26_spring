@@ -14,3 +14,5 @@ RSpec.configure do |config|
     c.syntax = :expect
   end
 end
+
+RSpec::Matchers.define_negated_matcher :not_change, :change

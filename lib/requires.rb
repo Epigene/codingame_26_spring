@@ -7,7 +7,7 @@ def debug(message)
   STDERR.puts message
 end
 
-# Monkeypatching String to behave like a Point, have x, y etc
+# Monkeypatching String '1 -1' to behave like a Point, have x, y
 class String
   def x
     split.first.to_i

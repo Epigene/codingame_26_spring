@@ -1,6 +1,6 @@
 # Condinbot
 Not a gem! A sandbox where to develop bots for codingame in TDD manner, in separate, testable files.
-This one is a solution for Codingame 2025 Summer challenge (flame dousing)
+This one is an entry for Codingame 2026 Spring challenge (worker troll controlling)
 
 ## Use
 1. Place files in `lib/`, and require them in `lib/codinbot.rb` like you normally would.

@@ -41,6 +41,22 @@ RSpec.describe Grid, instance_name: :grid do
     end
   end
 
+  describe "#remove_connection(from_node, to_node)" do
+    subject(:remove_connection) { grid.remove_connection(from_node, to_node) }
+
+    let(:grid) { described_class.new(1, 2, fill: true) }
+
+    let(:from_node) { "0 1" }
+    let(:to_node) { "0 0" }
+
+    it "modifies the structure to remove a possibly existing one direction of a connection" do
+      expect { remove_connection }.to(
+        change { grid["0 1"] }.from(["0 0"].to_set).to([].to_set)
+        .and(not_change { grid["0 0"]}.from(["0 1"].to_set))
+      )
+    end
+  end
+
   describe "#n8(point)" do
     subject(:n8) { grid.n8(point) }
 
