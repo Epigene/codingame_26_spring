@@ -2,5 +2,4 @@
 
 require "requires"
 require "grid"
-require "cell"
 require "controller"
