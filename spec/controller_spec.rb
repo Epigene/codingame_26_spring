@@ -387,6 +387,57 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "when initialized with seed TODO" do
+      let(:field) do
+        <<~FIELD
+          ...#..+#............
+          #.........1....~~~..
+          ~~.............~~~..
+          ~~.+..#........~~~~.
+          ~~~~~..........~~~~~
+          ~~~~~..........~~~~~
+          .~~~~........#..+.~~
+          ..~~~.............~~
+          ..~~~....0.........#
+          ............#+..#...
+        FIELD
+      end
+
+      let(:input) do
+        <<~INPUT
+          6 2 4 8 5 0
+          1 3 1 8 3 0
+          18
+          PLUM 15 7 4 12 1 7
+          PLUM 4 2 4 12 1 7
+          PLUM 18 8 4 12 2 3
+          PLUM 1 1 4 12 2 3
+          LEMON 10 9 4 12 2 4
+          LEMON 9 0 4 12 2 4
+          LEMON 5 6 4 12 0 2
+          LEMON 14 3 4 12 0 2
+          LEMON 19 2 3 10 0 1
+          LEMON 0 7 3 10 0 1
+          APPLE 16 0 4 20 3 1
+          APPLE 3 9 4 20 3 1
+          BANANA 14 9 4 6 1 6
+          BANANA 5 0 4 6 1 6
+          LEMON 9 7 1 6 0 1
+          APPLE 14 1 3 17 0 2
+          LEMON 9 6 1 6 0 4
+          LEMON 8 7 1 6 0 8
+          3
+          0 0 8 7 1 1 1 1 0 0 0 0 0 0
+          1 1 14 5 1 1 1 1 0 0 0 0 0 0
+          2 1 10 3 2 1 1 1 0 0 0 0 0 0
+        INPUT
+      end
+
+      it "works without errors" do
+        is_expected.to eq("MSG IROON!; MOVE 0 9 7")
+      end
+    end
+
     # EXAMPLE
     context "when initialized with seed TODO" do
       let(:field) do
@@ -402,7 +453,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       xit "returns " do
-        is_expected.to eq("TRAIN 1 1 1 0; MOVE 0 6 2")
+        is_expected.to eq("TODO")
       end
     end
   end

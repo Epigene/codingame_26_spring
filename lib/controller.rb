@@ -235,7 +235,7 @@ class Controller
       return go_and_drop(worker, closest_camp_n4)
     end
 
-    closest_mine = iron_nodes.min_by { shortest_path(worker.node, _1).size }
+    closest_mine = mining_nodes.min_by { shortest_path(worker.node, _1).size }
     return go_and_mine(worker, closest_mine)
   end
 
@@ -539,7 +539,7 @@ class Controller
 
         grass_nodes << node if cell == "."
         water_nodes << node if cell == "~"
-        grid.n4(node).each { iron_nodes << _1 } if cell == "+"
+        iron_nodes << node if cell == "+"
 
         @my_camp = Camp.new(true, x, y) if cell == "0"
         @opp_camp = Camp.new(false, x, y) if cell == "1"
@@ -554,6 +554,7 @@ class Controller
 
     grass_nodes.each do |grass_node|
       wet_nodes << grass_node if @grid.n4(grass_node).any? { water_nodes.include?(_1) }
+      mining_nodes << grass_node if @grid.n4(grass_node).any? { iron_nodes.include?(_1) }
     end
 
     #== precrunching shortest paths between all grass nodes and from camp to grass nodes
@@ -635,7 +636,10 @@ class Controller
     @water_nodes ||= Set.new
   end
 
-  # Not iron itself, but n4 where mining can occur
+  def mining_nodes
+    @mining_nodes ||= Set.new
+  end
+
   def iron_nodes
     @iron_nodes ||= Set.new
   end
