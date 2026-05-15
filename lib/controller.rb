@@ -120,7 +120,7 @@ class Controller
       ensure_sufficient_plum_growth if my_inventory.plum < 5
       return @commands.join("; ") if @commands.any?
 
-      gather_iron if my_inventory.iron < 10
+      gather_iron(my_workers.first) if my_inventory.iron < 10
       return @commands.join("; ") if @commands.any?
 
       gather_initial_fruit(my_workers.first, "LEMON", _max_wait = 5) if my_inventory.lemon < 17
@@ -158,7 +158,7 @@ class Controller
       cell = cells[near_node]
       next 0 if cell.nil? || cell.tree.nil? || cell.tree.type != "LEMON"
 
-      wet_nodes.include?(near_node) ? (1/8.0) : (1/3.0)
+      wet_nodes.include?(near_node) ? (1/3.0) : (1/8.0)
     end
     debug "== Eventual Lemon production near camp per turn #{expected_lemon_production_near_camp_per_turn}"
 
@@ -229,8 +229,14 @@ class Controller
     nil
   end
 
-  def gather_iron
-    # noop for now!
+  def gather_iron(worker)
+    if worker.full?
+      closest_camp_n4 = grid.n4(my_camp.node).min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_camp_n4)
+    end
+
+    closest_mine = iron_nodes.min_by { shortest_path(worker.node, _1).size }
+    return go_and_mine(worker, closest_mine)
   end
 
   def gather_initial_fruit(worker, fruit_type, max_wait)
@@ -373,6 +379,16 @@ class Controller
       else
         debug("== Hmm, no banana trees on map?")
       end
+    end
+  end
+
+  def go_and_mine(worker, node)
+    if worker.node == node # already there!
+      @commands << "MINE #{worker.id}"
+    else # go if not there
+      path = shortest_path(worker.node, node)
+      @commands << "MSG IROON!"
+      @commands << "MOVE #{worker.id} #{path[worker.movement_speed] || path.last}"
     end
   end
 
@@ -523,6 +539,7 @@ class Controller
 
         grass_nodes << node if cell == "."
         water_nodes << node if cell == "~"
+        grid.n4(node).each { iron_nodes << _1 } if cell == "+"
 
         @my_camp = Camp.new(true, x, y) if cell == "0"
         @opp_camp = Camp.new(false, x, y) if cell == "1"
@@ -616,5 +633,10 @@ class Controller
 
   def water_nodes
     @water_nodes ||= Set.new
+  end
+
+  # Not iron itself, but n4 where mining can occur
+  def iron_nodes
+    @iron_nodes ||= Set.new
   end
 end
