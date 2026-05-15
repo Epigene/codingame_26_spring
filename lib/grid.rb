@@ -131,7 +131,7 @@ class Grid
     return if structure[cell].nil?
 
     structure[cell].each do |other_cell|
-      structure[other_cell] -= [cell]
+      structure[other_cell].delete(cell)
       structure.delete(other_cell) if structure[other_cell].none?
     end
 
@@ -145,7 +145,7 @@ class Grid
   #   1. "only able to leave camp, never return to it"
   #   2. "trap, only able to step on it, never leave"
   def remove_connection(from_node, to_node)
-    structure[from_node] -= [to_node]
+    structure[from_node].delete(to_node)
     nil
   end
 

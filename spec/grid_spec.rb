@@ -41,6 +41,22 @@ RSpec.describe Grid, instance_name: :grid do
     end
   end
 
+  describe "#remove_cell(cell)" do
+    subject(:removing) { grid.remove_cell("7 3") }
+
+    let(:grid) { described_class.new(18, 9, fill: true) }
+
+    it "removes a cell from the grid, severing all connections to and from" do
+      grid.remove_cell("5 3")
+
+      expect { removing }.to(
+        change { grid["7 3"].size }.from(4).to(0)
+        .and(change { grid["7 2"].size }.from(4).to(3))
+        .and(change { grid["6 3"].size }.from(3).to(2))
+      )
+    end
+  end
+
   describe "#remove_connection(from_node, to_node)" do
     subject(:remove_connection) { grid.remove_connection(from_node, to_node) }
 

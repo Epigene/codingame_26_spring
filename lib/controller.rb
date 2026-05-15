@@ -535,7 +535,9 @@ class Controller
       line.split("").each_with_index do |cell, x|
         node = "#{x} #{y}"
         # . for GRASS, ~ for WATER, # for ROCK, + for IRON, 0 for your own SHACK, 1 for your opponent's SHACK.
-        @grid.remove_cell(node) if %w[~ # +].include?(cell)
+        if %w[~ # +].include?(cell)
+          grid.remove_cell(node)
+        end
 
         grass_nodes << node if cell == "."
         water_nodes << node if cell == "~"
@@ -543,13 +545,14 @@ class Controller
 
         @my_camp = Camp.new(true, x, y) if cell == "0"
         @opp_camp = Camp.new(false, x, y) if cell == "1"
-
-        if cell == "0" || cell == "1"
-          @grid.n4(node).each do |next_to_camp|
-            @grid.remove_connection(next_to_camp, node)
-          end
-        end
       end
+    end
+
+    grid.n4(my_camp.node).each do |next_to_camp|
+      grid.remove_connection(next_to_camp, my_camp.node)
+    end
+    grid.n4(opp_camp.node).each do |next_to_camp|
+      grid.remove_connection(next_to_camp, opp_camp.node)
     end
 
     grass_nodes.each do |grass_node|
@@ -562,7 +565,7 @@ class Controller
       shortest_path(my_camp.node, grass_node)
     end
 
-    grid.n4(my_camp.node).each do |node|
+    grid.neighbors(my_camp.node).each do |node|
       grass_nodes.each do |grass_node|
         shortest_path(node, grass_node)
       end

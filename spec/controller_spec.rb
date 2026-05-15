@@ -31,6 +31,26 @@ RSpec.describe Controller, instance_name: :controller do
         expect(controller.opp_camp.node).to eq("3 1")
       end
     end
+
+    context "when field is from a real map" do
+      let(:field) do
+        <<~FIELD
+          ...~~#.....##....#
+          ...~~~~..+......~~
+          .....~~0........~~
+          .....~.#...#......
+          ..................
+          ......#...#.~.....
+          ~~........1~~.....
+          ~~......+..~~~~...
+          #....##.....#~~...
+        FIELD
+      end
+
+      it "inits fine" do
+        expect(controller.send(:mining_nodes)).not_to be_nil
+      end
+    end
   end
 
   describe "#call(turn:, input:)" do
@@ -435,6 +455,32 @@ RSpec.describe Controller, instance_name: :controller do
 
       it "works without errors" do
         is_expected.to eq("MSG IROON!; MOVE 0 9 7")
+      end
+    end
+
+    context "when initialized with seed TODO" do
+      let(:field) do
+        <<~FIELD
+          ...~~#.....##....#
+          ...~~~~..+......~~
+          .....~~0........~~
+          .....~.#...#......
+          ..................
+          ......#...#.~.....
+          ~~........1~~.....
+          ~~......+..~~~~...
+          #....##.....#~~...
+        FIELD
+      end
+
+      let(:input) do
+        <<~INPUT
+
+        INPUT
+      end
+
+      it "returns " do
+        is_expected.to eq("TODO")
       end
     end
 
