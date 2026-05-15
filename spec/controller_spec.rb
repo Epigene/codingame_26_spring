@@ -407,7 +407,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
-    context "when initialized with seed TODO" do
+    context "when initialized with far-water case" do
       let(:field) do
         <<~FIELD
           ...#..+#............
@@ -455,32 +455,6 @@ RSpec.describe Controller, instance_name: :controller do
 
       it "works without errors" do
         is_expected.to eq("MSG IROON!; MOVE 0 9 7")
-      end
-    end
-
-    context "when initialized with seed TODO" do
-      let(:field) do
-        <<~FIELD
-          ...~~#.....##....#
-          ...~~~~..+......~~
-          .....~~0........~~
-          .....~.#...#......
-          ..................
-          ......#...#.~.....
-          ~~........1~~.....
-          ~~......+..~~~~...
-          #....##.....#~~...
-        FIELD
-      end
-
-      let(:input) do
-        <<~INPUT
-
-        INPUT
-      end
-
-      it "returns " do
-        is_expected.to eq("TODO")
       end
     end
 

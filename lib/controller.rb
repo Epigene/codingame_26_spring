@@ -231,8 +231,8 @@ class Controller
 
   def gather_iron(worker)
     if worker.full?
-      closest_camp_n4 = grid.n4(my_camp.node).min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_camp_n4)
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_dropoff)
     end
 
     closest_mine = mining_nodes.min_by { shortest_path(worker.node, _1).size }
@@ -240,10 +240,10 @@ class Controller
   end
 
   def gather_initial_fruit(worker, fruit_type, max_wait)
-    if worker.full? && grid.n4(my_camp.node).include?(worker.node)
+    if worker.full? && dropoff_nodes.include?(worker.node)
       @commands << "DROP #{worker.id}"
     elsif worker.full? # go to dropoff
-      home_paths = grid.n4(my_camp.node).map { [_1, shortest_path(worker.node, _1)]}
+      home_paths = dropoff_nodes.map { [_1, shortest_path(worker.node, _1)]}
       next_to_home_node, path = home_paths.sort_by { |_node, path| path.size }.first
 
       @commands << "MOVE #{worker.id} #{next_to_home_node}"
@@ -272,7 +272,7 @@ class Controller
 
     # 0. unload if carrying wood for some reason
     if chopper.carry_wood.positive?
-      closest_camp_n4 = grid.n4(my_camp.node).min_by { shortest_path(chopper.node, _1).size }
+      closest_camp_n4 = dropoff_nodes.min_by { shortest_path(chopper.node, _1).size }
 
       return go_and_drop(chopper, closest_camp_n4)
     end
@@ -333,7 +333,7 @@ class Controller
 
     [servant].each do |worker|
       if worker.full? && worker.carry_banana.zero?
-        closest_camp_n4 = grid.n4(my_camp.node).min_by { shortest_path(worker.node, _1).size }
+        closest_camp_n4 = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
 
         go_and_drop(worker, closest_camp_n4)
         next
@@ -366,8 +366,8 @@ class Controller
         go_and_harvest(worker, seed_node)
         next
       elsif my_inventory.banana.positive?
-        closest_camp_n4 = grid.n4(my_camp.node).min_by { shortest_path(worker.node, _1).size }
-        go_and_pick(worker, closest_camp_n4, "BANANA")
+        closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+        go_and_pick(worker, closest_dropoff, "BANANA")
         next
       elsif (banana_nodes = cells.select { |node, cell| cell&.tree&.type?("BANANA") }).any?
         closest, _cell = banana_nodes.min_by { |node, cell| cell.tree.turns_till_fruit(worker, shortest_path(worker.node, node)) }
@@ -429,7 +429,7 @@ class Controller
   end
 
   def go_and_drop(worker, node)
-    if grid.n4(my_camp.node).include?(worker.node) # already next to camp!
+    if dropoff_nodes.include?(worker.node) # already next to camp!
       @commands << "DROP #{worker.id}"
     else
       path = shortest_path(worker.node, node)
@@ -551,7 +551,7 @@ class Controller
     grid.n4(my_camp.node).each do |next_to_camp|
       grid.remove_connection(next_to_camp, my_camp.node)
     end
-    grid.n4(opp_camp.node).each do |next_to_camp|
+    !opp_camp.nil? && grid.n4(opp_camp.node).each do |next_to_camp|
       grid.remove_connection(next_to_camp, opp_camp.node)
     end
 
@@ -591,6 +591,9 @@ class Controller
 
     shortest_paths[key.reverse] = path.reverse
     shortest_paths[key] = path
+  rescue => e
+    debug("XX Could not get path from #{from} to #{to}")
+    raise
   end
 
   # @return Hash # keys are array of start-end node pairs
@@ -624,6 +627,10 @@ class Controller
       else
         nodes_within_3_of_camp.max_by { (grid.neighbors(_1) & nodes_within_3_of_camp).size }
       end
+  end
+
+  def dropoff_nodes
+    @dropoff_nodes ||= grid.neighbors(my_camp.node)
   end
 
   # @return Set
