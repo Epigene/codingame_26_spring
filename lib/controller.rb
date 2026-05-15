@@ -220,9 +220,9 @@ class Controller
       @commands << "PLANT #{worker.id} #{tree_type}"
     elsif worker.send(getter).positive?
       @commands << "MOVE #{worker.id} #{path.last}"
-    elsif worker.node == path[1] && worker.send(getter).zero?
+    elsif worker.node == path[1] && worker.send(getter).zero? && my_inventory.send(tree_type.downcase).positive?
       @commands << "PICK #{worker.id} #{tree_type}"
-    else # as in no lemon in hand, go to near camp
+    elsif my_inventory.send(tree_type.downcase).positive? # as in no lemon in hand, go to near camp
       @commands << "MOVE #{worker.id} #{path[1]}"
     end
 
