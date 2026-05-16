@@ -887,6 +887,40 @@ RSpec.describe Controller, instance_name: :controller do
           is_expected.to eq("TRAIN 3 2 2 1; MOVE 1 15 1")
         end
       end
+
+      context "when intermediate worker has just appeared" do
+        let(:input) do
+          <<~INPUT
+            0 1 4 9 1 0
+            10 6 9 9 3 0
+            16
+            PLUM 14 8 3 10 0 2
+            PLUM 7 2 3 10 0 2
+            LEMON 9 4 4 12 3 2
+            LEMON 12 6 4 12 3 2
+            LEMON 19 1 4 12 3 1
+            LEMON 2 9 4 12 3 1
+            APPLE 13 8 4 20 0 2
+            APPLE 8 2 4 20 0 2
+            APPLE 17 8 1 11 0 1
+            APPLE 4 2 1 11 0 1
+            APPLE 16 0 1 11 0 8
+            APPLE 5 10 1 11 0 8
+            BANANA 12 7 4 6 0 3
+            BANANA 9 3 4 6 0 3
+            BANANA 19 6 4 6 3 4
+            BANANA 2 4 4 6 3 4
+            3
+            0 1 8 9 1 1 1 1 0 0 0 0 0 0
+            1 0 15 1 1 1 1 1 0 0 0 0 0 0
+            2 0 14 1 3 2 2 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter to get iron and helper to plant lemon he's carrying" do
+          is_expected.to eq("MOVE 2 11 1; PLANT 1 LEMON")
+        end
+      end
     end
 
     # EXAMPLE

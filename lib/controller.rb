@@ -137,11 +137,29 @@ Worker = Struct.new(:id, :player, :x, :y,
     chop_power.positive?
   end
 end
+Plan = Struct.new(:name, :worker_id, :type, :node, :weight) do
+  # @return String
+  def command
+    return "#{name} #{worker_id} #{node}" if name == "MOVE"
+
+    [
+      name,
+      worker_id,
+      type
+    ].compact.join(" ")
+  end
+
+  def weight
+    @weight || 0
+  end
+end
 
 class Controller
   attr_reader :field, :turn, :input, :grid,
     :my_camp, :opp_camp, :my_inventory, :opp_inventory,
-    :cells, :trees, :workers, :chopper
+    :cells, :trees,
+    :workers, :helper, :inter, :chopper,
+    :training, :messages, :plans
 
   # Trees differ in cooldown and health as follows: | TRAIN moveSpeed carryCapacity harvestPower chopPower
   #                     PLUM	LEMON	APPLE	BANANA
@@ -178,7 +196,9 @@ class Controller
     @turn = turn
     debug(@input = input)
     init_turn_variables!
-    @commands = []
+    @training = nil
+    @messages = []
+    @plans = {} # worker-id-keyed
 
     # hardcoded experiments
     # return "MOVE 0 8 5" if turn == 1
@@ -196,46 +216,27 @@ class Controller
       if turns_till_chopper > 70
         potential_worker = my_inventory.best_intermediate_worker(my_workers.size)
         if potential_worker
-          @commands << "TRAIN #{potential_worker}"
+          @training = "TRAIN #{potential_worker}"
         end
       end
     end
 
     if chopper.nil? && my_inventory.can_afford?(best_worker_cost)
       debug("== OK, time to get a chopper and start chopping!")
-      @commands << "TRAIN 2 4 0 3" # "TRAIN 1 1 1 0"
-    end
-
-    # Initial boosting has one goal - be able to afford an excellent chopper worker.
-    # It consists of 3 subgoals:
-    #  1. Reach 17 lemons
-    #  2. 10 iron
-    #  3. 5 plums (easy)
-    if chopper.nil? && @commands.none? { _1.match?(%r'TRAIN \d+ \d+ 0') }
-      ensure_sufficient_lemon_growth if my_inventory.lemon < 17
-      return @commands.join("; ") if @commands.any?
-
-      ensure_sufficient_plum_growth if my_inventory.plum < 5
-      return @commands.join("; ") if @commands.any?
-
-      gather_initial_fruit(my_workers.first, "LEMON", _max_wait = 5) if my_inventory.lemon < 17
-      return @commands.join("; ") if @commands.any?
-
-      gather_initial_fruit(my_workers.first, "PLUM", _max_wait = 5) if my_inventory.plum < 5
-      return @commands.join("; ") if @commands.any?
-
-      # Iron gathering is low prio because it can't be denied
-      gather_iron(my_workers.first) if my_inventory.iron < 10
-      return @commands.join("; ") if @commands.any?
-
-      gather_initial_fruit(my_workers.first, "LEMON", _max_wait = 30) if my_inventory.lemon < 17
-      return @commands.join("; ") if @commands.any?
+      @training = "TRAIN 2 4 0 3" # "TRAIN 1 1 1 0"
     end
 
     organize_chopping if chopper
-    organize_chopper_helpers
+    organize_intermediate(inter) if inter
+    organize_helper(helper)
 
-    (result = @commands.join("; ")) == "" ? "WAIT" : result
+    result = [
+      messages.any? ? "MSG #{messages.join(", ")}" : nil,
+      training,
+      *plans.values.sort_by { -_1.weight }.map(&:command)
+    ].compact.join("; ")
+
+    result == "" ? "WAIT" : result
   end
   # Each turn you can print any number of commands, separated by ;.
   # MOVE id x y Move troll id to cell (x, y).
@@ -250,6 +251,124 @@ class Controller
   # MSG text to display a message in the replay.
 
   private
+
+  def organize_intermediate(worker)
+    # TODO
+    # gather_initial_fruit(worker, fruit_type, max_wait)
+  end
+
+  def organize_helper(worker)
+    # Initial boosting has one goal - be able to afford an excellent chopper worker.
+    # It consists of 3 subgoals:
+    #  1. Reach 17 lemons
+    #  2. 10 iron
+    #  3. 5 plums (easy)
+    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+      (my_inventory.lemon < 17 && ensure_sufficient_lemon_growth) ||
+        (my_inventory.plum < 5 && ensure_sufficient_plum_growth) ||
+        (my_inventory.lemon < 17 && gather_initial_fruit(my_workers.first, "LEMON", 5)) ||
+        (my_inventory.plum < 5 && gather_initial_fruit(my_workers.first, "PLUM", 5)) ||
+        (my_inventory.iron < 10 && gather_iron(my_workers.first)) ||
+        (my_inventory.lemon < 17 && gather_initial_fruit(my_workers.first, "LEMON", 30))
+      # ensure_sufficient_lemon_growth if my_inventory.lemon < 17
+      # return if plans.key?(worker.id)
+
+      # ensure_sufficient_plum_growth if my_inventory.plum < 5
+      # return if plans.key?(worker.id)
+
+      # gather_initial_fruit(my_workers.first, "LEMON", _max_wait = 5) if my_inventory.lemon < 17
+      # return if plans.key?(worker.id)
+
+      # gather_initial_fruit(my_workers.first, "PLUM", _max_wait = 5) if my_inventory.plum < 5
+      # return if plans.key?(worker.id)
+
+      # # Iron gathering is low prio because it can't be denied
+      # gather_iron(my_workers.first) if my_inventory.iron < 10
+      # return if plans.key?(worker.id)
+
+      # gather_initial_fruit(my_workers.first, "LEMON", _max_wait = 30) if my_inventory.lemon < 17
+      # return if plans.key?(worker.id)
+    end
+
+    # == Regular helping starts ==
+
+    if worker.full? && worker.carry_banana.zero?
+      closest_camp_n4 = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+
+      return go_and_drop(worker, closest_camp_n4)
+    end
+
+    # Get off square chopper wants to get to
+    if plans.values.any? { _1.node == worker.node }
+      # prefer an empty nearby square (if any) if carrying a seed banana
+      if worker.full? && worker.carry_banana.positive?
+        nearby_plantable_node = grid.neighbors(worker.node)
+          .select { cells[_1]&.tree.nil? }
+          .min_by { shortest_path(my_camp.node, _1) }
+
+        return go_and_plant(worker, nearby_plantable_node, "BANANA") if nearby_plantable_node
+
+        nearby_tree_node = grid.neighbors(worker.node)
+          .select { cells[_1]&.tree }
+          .quick_min_by { cells[_1].tree.turns_till_size(4) }
+
+        return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
+      end
+
+      # otherwise worker is not carrying anything
+      nearby_tree_node = grid.neighbors(worker.node)
+        .select { cells[_1]&.tree }
+        .quick_min_by { cells[_1].tree.turns_till_size(4) }
+      return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
+
+      nearby_empty_node = grid.neighbors(worker.node)
+        .select { cells[_1]&.tree.nil? }
+        .min_by { shortest_path(my_camp.node, _1) }
+      return go_and_chop(worker, nearby_empty_node) if nearby_empty_node
+    end
+
+    if turn > 285
+      # TODO, noop for now, but could chop or pre-chop something at the tails end
+      # Definitely no sense planting anything anymore
+      return
+    end
+
+    if worker.carry_banana.positive?
+      # 1. seek to plant a banana on seed node
+      if cells[seed_node]&.tree.nil?
+        return go_and_plant(worker, seed_node, "BANANA")
+      end
+
+      # 2. seek to plant next to seed node
+      closest = nodes_within_3_of_camp_except_seed
+        .select { cells[_1]&.tree.nil? }
+        .min_by { shortest_path(worker.node, _1).size + shortest_path(my_camp.node, _1).size }
+
+      if closest
+        return go_and_plant(worker, closest, "BANANA")
+      end
+    end
+
+    # not carrying a banana, should get one
+    seeding_bananas =
+      cells[seed_node]&.tree&.type?("BANANA") &&
+      cells[seed_node]&.tree&.turns_till_fruit(worker, shortest_path(worker.node, seed_node)) < 5
+
+    if seeding_bananas
+      return go_and_harvest(worker, seed_node)
+    elsif my_inventory.banana.positive?
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_pick(worker, closest_dropoff, "BANANA")
+    elsif (banana_nodes = cells.select { |node, cell| cell&.tree&.type?("BANANA") }).any?
+      closest, _cell = banana_nodes.min_by { |node, cell| cell.tree.turns_till_fruit(worker, shortest_path(worker.node, node)) }
+
+      if closest
+        return go_and_harvest(worker, closest)
+      end
+    else
+      debug("== Hmm, no banana trees on map?")
+    end
+  end
 
   def ensure_sufficient_lemon_growth
     expected_lemon_production_near_camp_per_turn = nodes_within_3_of_camp.sum do |near_node|
@@ -267,8 +386,7 @@ class Controller
       .min_by { _1.size }
 
     if wet_path
-      handle_planting_at_end_of(my_workers.first, wet_path, "LEMON")
-      return
+      return handle_planting_at_end_of(my_workers.first, wet_path, "LEMON")
     end
 
     regular_path, _ = nodes_within_3_of_camp.select { cells[_1].nil? || cells[_1].tree.nil? }
@@ -276,8 +394,7 @@ class Controller
       .min_by { _1.size + _2.size }
 
     if regular_path
-      handle_planting_at_end_of(my_workers.first, regular_path, "LEMON")
-      return
+      return handle_planting_at_end_of(my_workers.first, regular_path, "LEMON")
     end
   end
 
@@ -297,8 +414,7 @@ class Controller
       .min_by { _1.size }
 
     if wet_path
-      handle_planting_at_end_of(my_workers.first, wet_path, "PLUM")
-      return
+      return handle_planting_at_end_of(my_workers.first, wet_path, "PLUM")
     end
 
     regular_path, _ = nodes_within_3_of_camp.select { cells[_1].nil? || cells[_1].tree.nil? }
@@ -306,8 +422,7 @@ class Controller
       .min_by { _1.size + _2.size }
 
     if regular_path
-      handle_planting_at_end_of(my_workers.first, regular_path, "PLUM")
-      return
+      return handle_planting_at_end_of(my_workers.first, regular_path, "PLUM")
     end
   end
 
@@ -315,16 +430,20 @@ class Controller
     getter = "carry_#{tree_type.downcase}"
 
     if worker.node == path.last && worker.send(getter).positive?
-      @commands << "PLANT #{worker.id} #{tree_type}"
+      # @commands << "PLANT #{worker.id} #{tree_type}"
+      plans[worker.id] = Plan.new("PLANT", worker.id, tree_type)
     elsif worker.send(getter).positive?
-      @commands << "MOVE #{worker.id} #{path.last}"
+      # @commands << "MOVE #{worker.id} #{path.last}"
+      plans[worker.id] = Plan.new("MOVE", worker.id, path.last) # TODO, use acual step size
     elsif worker.node == path[1] && worker.send(getter).zero? && my_inventory.send(tree_type.downcase).positive?
-      @commands << "PICK #{worker.id} #{tree_type}"
+      # @commands << "PICK #{worker.id} #{tree_type}"
+      plans[worker.id] = Plan.new("PICK", worker.id, tree_type)
     elsif my_inventory.send(tree_type.downcase).positive? # as in no lemon in hand, go to near camp
-      @commands << "MOVE #{worker.id} #{path[1]}"
+      # @commands << "MOVE #{worker.id} #{path[1]}"
+      plans[worker.id] = Plan.new("MOVE", worker.id, path[1])
     end
 
-    nil
+    true
   end
 
   def gather_iron(worker)
@@ -366,9 +485,6 @@ class Controller
   end
 
   def organize_chopping
-    chopper = my_workers.max_by(&:carry_capacity)
-    return if chopper.chop_power < 3
-
     # 0. unload if carrying wood for some reason
     if chopper.carry_wood.positive?
       closest_camp_n4 = dropoff_nodes.min_by { shortest_path(chopper.node, _1).size }
@@ -391,7 +507,8 @@ class Controller
       if interceptable_chops.any?
         path, _, _ = interceptable_chops.quick_max_by { |p, to_reach, to_fell| cells[p.last].tree.size }
 
-        return go_and_chop(chopper, path.last, message: "chop warz")
+        messages << "chop warz"
+        return go_and_chop(chopper, path.last)
       end
     end
 
@@ -399,7 +516,8 @@ class Controller
     if !nodes_within_3_of_camp.include?(chopper.node)
       closest_grown_tree = trees.select(&:grown?).min_by { shortest_path(chopper.node, _1.node).size }
       if closest_grown_tree
-        return go_and_chop(chopper, closest_grown_tree.node, message: "beeline")
+        messages << "beeline"
+        return go_and_chop(chopper, closest_grown_tree.node)
       end
     end
 
@@ -410,7 +528,8 @@ class Controller
 
       if nearby_bananas.any?
         node = nearby_bananas.quick_min_by { shortest_path(chopper.node, _1).size }
-        go_and_chop(chopper, node, message: "fullclear")
+        messages << "fullclear"
+        go_and_chop(chopper, node)
         return
       end
 
@@ -419,7 +538,8 @@ class Controller
 
       if nearby_non_bananas.any?
         node = nearby_non_bananas.quick_min_by { shortest_path(chopper.node, _1).size }
-        go_and_chop(chopper, node, message: "fullclear")
+        messages << "fullclear"
+        go_and_chop(chopper, node)
         return
       end
     end
@@ -480,163 +600,81 @@ class Controller
       .min_by { shortest_path(chopper.node, _1.node).size }
 
     if closest_grown_tree
-      return go_and_chop(chopper, closest_grown_tree.node, message: "beeline")
+      messages << "beeline"
+      return go_and_chop(chopper, closest_grown_tree.node)
     end
 
     debug("== D'oh, no grown trees, checking any trees")
 
     closest_tree = trees.min_by { shortest_path(chopper.node, _1.node).size }
     if closest_tree
-      return go_and_chop(chopper, closest_tree.node, message: "slim pickings")
+      messages << "slim pickings"
+      return go_and_chop(chopper, closest_tree.node)
     end
 
     debug("== no trees on map, entering endgame")
     closest_dropoff = dropoff_nodes.min_by { shortest_path(chopper.node, _1).size }
-    go_and_chop(chopper, closest_dropoff, message: "hugging base")
+    messages << "hugging base"
+    go_and_chop(chopper, closest_dropoff)
   end
 
-  def organize_chopper_helpers
-    servant = my_workers.min_by(&:carry_capacity)
-
-    [servant].each do |worker|
-      if worker.full? && worker.carry_banana.zero?
-        closest_camp_n4 = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-
-        go_and_drop(worker, closest_camp_n4)
-        next
-      end
-
-      # Get off square chopper wants to get to
-      if @commands.any? { _1.match?(%r'MOVE \d+ #{worker.node}') }
-        # prefer an empty nearby square (if any) if carrying a seed banana
-        if worker.full? && worker.carry_banana.positive?
-          nearby_plantable_node = grid.neighbors(worker.node)
-            .select { cells[_1]&.tree.nil? }
-            .min_by { shortest_path(my_camp.node, _1) }
-
-          return go_and_plant(worker, nearby_plantable_node, "BANANA") if nearby_plantable_node
-
-          nearby_tree_node = grid.neighbors(worker.node)
-            .select { cells[_1]&.tree }
-            .quick_min_by { cells[_1].tree.turns_till_size(4) }
-
-          return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
-        end
-
-        # otherwise worker is not carrying anything
-        nearby_tree_node = grid.neighbors(worker.node)
-          .select { cells[_1]&.tree }
-          .quick_min_by { cells[_1].tree.turns_till_size(4) }
-        return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
-
-        nearby_empty_node = grid.neighbors(worker.node)
-          .select { cells[_1]&.tree.nil? }
-          .min_by { shortest_path(my_camp.node, _1) }
-        return go_and_chop(worker, nearby_empty_node) if nearby_empty_node
-      end
-
-      if turn > 285
-        # TODO, noop for now, but could chop or pre-chop something at the tails end
-        # Definitely no sense planting anything anymore
-        return
-      end
-
-      if worker.carry_banana.positive?
-        # 1. seek to plant a banana on seed node
-        if cells[seed_node]&.tree.nil?
-          go_and_plant(worker, seed_node, "BANANA")
-          next
-        end
-
-        # 2. seek to plant next to seed node
-        closest = nodes_within_3_of_camp_except_seed
-          .select { cells[_1]&.tree.nil? }
-          .min_by { shortest_path(worker.node, _1).size + shortest_path(my_camp.node, _1).size }
-
-        if closest
-          go_and_plant(worker, closest, "BANANA")
-          next
-        end
-      end
-
-      # not carrying a banana, should get one
-      seeding_bananas =
-        cells[seed_node]&.tree&.type?("BANANA") &&
-        cells[seed_node]&.tree&.turns_till_fruit(worker, shortest_path(worker.node, seed_node)) < 5
-
-      if seeding_bananas
-        go_and_harvest(worker, seed_node)
-        next
-      elsif my_inventory.banana.positive?
-        closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-        go_and_pick(worker, closest_dropoff, "BANANA")
-        next
-      elsif (banana_nodes = cells.select { |node, cell| cell&.tree&.type?("BANANA") }).any?
-        closest, _cell = banana_nodes.min_by { |node, cell| cell.tree.turns_till_fruit(worker, shortest_path(worker.node, node)) }
-
-        if closest
-          go_and_harvest(worker, closest)
-          next
-        end
-      else
-        debug("== Hmm, no banana trees on map?")
-      end
-    end
+  # a generic going. Checks about having reached should occur beforehand in callers.
+  def go(worker, node)
+    path = shortest_path(worker.node, node)
+    plans[worker.id] = Plan.new("MOVE", worker.id, nil, path[worker.move_speed] || path.last)
   end
 
   def go_and_mine(worker, node)
     if worker.node == node # already there!
-      @commands << "MINE #{worker.id}"
+      plans[worker.id] = Plan.new("MINE", worker.id) # "MINE #{worker.id}"
     else # go if not there
-      path = shortest_path(worker.node, node)
-      @commands << "MSG IROON!"
-      @commands << "MOVE #{worker.id} #{path[worker.move_speed] || path.last}"
+      messages << "IROON!"
+      go(worker, node)
     end
   end
 
-  def go_and_harvest(worker, node, message: nil)
+  def go_and_harvest(worker, node)
     if worker.node == node # already there!
-      @commands << "HARVEST #{worker.id}"
+      # @commands << "HARVEST #{worker.id}"
+      plans[worker.id] = Plan.new("HARVEST", worker.id)
     else # go if not there
-      path = shortest_path(worker.node, node)
-      @commands << "MOVE #{worker.id} #{path[worker.move_speed] || path.last}"
+      go(worker, node)
     end
   end
 
-  def go_and_pick(worker, node, type, message: nil)
+  def go_and_pick(worker, node, type)
     if worker.node == node # already there!
-      @commands << "PICK #{worker.id} #{type}"
+      # @commands << "PICK #{worker.id} #{type}"
+      plans[worker.id] = Plan.new("PICK", worker.id, type)
     else # go if not there
-      path = shortest_path(worker.node, node)
-      @commands << "MOVE #{worker.id} #{path[worker.move_speed] || path.last}"
+      go(worker, node)
     end
   end
 
-  def go_and_plant(worker, node, type, message: nil)
+  def go_and_plant(worker, node, type)
     if worker.node == node # already there!
-      @commands << "PLANT #{worker.id} #{type}"
+      # @commands << "PLANT #{worker.id} #{type}"
+      plans[worker.id] = Plan.new("PLANT", worker.id, type)
     else # go if not there
-      path = shortest_path(worker.node, node)
-      @commands << "MOVE #{worker.id} #{path[worker.move_speed] || path.last}"
+      go(worker, node)
     end
   end
 
-  def go_and_chop(chopper, node, message: nil)
+  def go_and_chop(chopper, node)
     if chopper.node == node # already there!
-      @commands << "CHOP #{chopper.id}"
+      # @commands << "CHOP #{chopper.id}"
+      plans[worker.id] = Plan.new("CHOP", worker.id)
     else # go if not there
-      path = shortest_path(chopper.node, node)
-      @commands << "MSG #{message}" if message
-      @commands << "MOVE #{chopper.id} #{path[chopper.move_speed] || path.last}"
+      go(chopper, node)
     end
   end
 
   def go_and_drop(worker, node)
     if dropoff_nodes.include?(worker.node) # already next to camp!
-      @commands << "DROP #{worker.id}"
+      # @commands << "DROP #{worker.id}"
+      plans[worker.id] = Plan.new("DROP", worker.id)
     else
-      path = shortest_path(worker.node, node)
-      @commands << "MOVE #{worker.id} #{path[worker.move_speed] || path.last}"
+      go(worker, node)
     end
   end
 
@@ -714,6 +752,8 @@ class Controller
     end
 
     @chopper ||= nil
+    @inter ||= nil
+
     @workers = []
     lines.shift.to_i.times do
       id, player, x, y, move_speed, carry_capacity, harvest_power, chop_power, carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood = lines.shift.split.map(&:to_i)
@@ -728,8 +768,14 @@ class Controller
       @cells["#{x} #{y}"] ||= Cell.new(x, y, nil, nil)
       @cells["#{x} #{y}"].worker = worker
 
-      if worker.my? && worker.chop_power > 2
-        @chopper = worker
+      if worker.my?
+        if worker.id == 0 || worker.id == 1
+          @helper = worker
+        elsif worker.chop_power > 2
+          @chopper = worker
+        else
+          @inter = worker
+        end
       end
     end
   end
