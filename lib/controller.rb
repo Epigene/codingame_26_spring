@@ -59,6 +59,7 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
   # Smart, assuming continious chopping and any outstanding growth, how many turns it will take to fell
   # @return Integer
   def chop_turns(chop_speed)
+    return 99 if chop_speed < 1
     return 1 if health <= chop_speed
 
     copy = dup
@@ -102,6 +103,10 @@ Worker = Struct.new(:id, :player, :x, :y,
 
   def full?
     [carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood].sum >= carry_capacity
+  end
+
+  def can_chop?
+    chop_power.positive?
   end
 end
 
@@ -328,7 +333,7 @@ class Controller
     end
 
     # WAR, seek to fight over chopping if opp within 2 turns can be cought
-    opp_workers_chopping = workers.select { !_1.my? }.select { cells[_1.node]&.tree&.damaged? }
+    opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
     if opp_workers_chopping.any?
       chops = opp_workers_chopping.map do |opp_worker|
         tree = cells[opp_worker.node].tree
@@ -457,6 +462,41 @@ class Controller
         next
       end
 
+      # Get off square chopper wants to get to
+      if @commands.any? { _1.match?(%r'MOVE \d+ #{worker.node}') }
+        # prefer an empty nearby square (if any) if carrying a seed banana
+        if worker.full? && worker.carry_banana.positive?
+          nearby_plantable_node = grid.neighbors(worker.node)
+            .select { cells[_1]&.tree.nil? }
+            .min_by { shortest_path(my_camp.node, _1) }
+
+          return go_and_plant(worker, nearby_plantable_node, "BANANA") if nearby_plantable_node
+
+          nearby_tree_node = grid.neighbors(worker.node)
+            .select { cells[_1]&.tree }
+            .quick_min_by { cells[_1].tree.turns_till_size(4) }
+
+          return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
+        end
+
+        # otherwise worker is not carrying anything
+        nearby_tree_node = grid.neighbors(worker.node)
+          .select { cells[_1]&.tree }
+          .quick_min_by { cells[_1].tree.turns_till_size(4) }
+        return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
+
+        nearby_empty_node = grid.neighbors(worker.node)
+          .select { cells[_1]&.tree.nil? }
+          .min_by { shortest_path(my_camp.node, _1) }
+        return go_and_chop(worker, nearby_empty_node) if nearby_empty_node
+      end
+
+      if turn > 285
+        # TODO, noop for now, but could chop or pre-chop something at the tails end
+        # Definitely no sense planting anything anymore
+        return
+      end
+
       if worker.carry_banana.positive?
         # 1. seek to plant a banana on seed node
         if cells[seed_node]&.tree.nil?
@@ -510,7 +550,7 @@ class Controller
     end
   end
 
-  def go_and_harvest(worker, node)
+  def go_and_harvest(worker, node, message: nil)
     if worker.node == node # already there!
       @commands << "HARVEST #{worker.id}"
     else # go if not there
@@ -519,7 +559,7 @@ class Controller
     end
   end
 
-  def go_and_pick(worker, node, type)
+  def go_and_pick(worker, node, type, message: nil)
     if worker.node == node # already there!
       @commands << "PICK #{worker.id} #{type}"
     else # go if not there
@@ -528,7 +568,7 @@ class Controller
     end
   end
 
-  def go_and_plant(worker, node, type)
+  def go_and_plant(worker, node, type, message: nil)
     if worker.node == node # already there!
       @commands << "PLANT #{worker.id} #{type}"
     else # go if not there

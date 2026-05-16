@@ -741,7 +741,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
       end
 
-      context "its the end of the game, time to harvest seed and everything else" do
+      context "its the end of the game, time to harvest even seed tree and everything else" do
         let(:turn) { 288 }
 
         let(:input) do
@@ -777,27 +777,134 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to go cut largest tree, including seed, which is the biggest" do
+          is_expected.to start_with("MSG fullclear; MOVE 4 8 9")
+        end
+      end
+
+      context "its the end of the game, time for helper to get out of the way" do
+        let(:turn) { 290 }
+
+        let(:input) do
+          <<~INPUT
+            0 0 4 1 0 144
+            9 1 2 0 0 67
+            15
+            PLUM 13 8 4 12 3 0
+            APPLE 12 8 4 15 3 0
+            BANANA 19 9 4 6 3 0
+            BANANA 2 1 4 6 3 0
+            BANANA 8 9 4 6 3 0
+            BANANA 19 8 4 6 1 2
+            BANANA 8 8 3 5 0 2
+            BANANA 19 3 4 6 0 1
+            BANANA 18 7 3 5 0 5
+            BANANA 15 0 2 4 0 4
+            BANANA 7 7 2 4 0 5
+            BANANA 20 4 2 2 0 2
+            BANANA 19 0 1 3 0 1
+            BANANA 15 2 1 3 0 2
+            BANANA 21 4 2 4 0 4
+            7
+            0 0 8 9 1 1 1 1 0 0 0 0 0 0
+            1 1 13 3 1 1 1 1 0 0 0 1 0 0
+            2 1 19 5 2 2 1 1 0 0 0 0 0 0
+            3 1 17 6 1 3 1 1 0 0 0 2 0 0
+            4 0 7 8 2 4 0 3 0 0 0 0 0 0
+            5 1 18 1 2 3 1 2 0 0 0 0 0 2
+            6 1 15 2 3 3 1 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to go cut largest tree, including seed, which is the biggest" do
           is_expected.to start_with("MSG fullclear; MOVE 4 8 9; MOVE 0 8 8")
         end
       end
     end
 
+    context "when seed=-4262217784875278300" do
+      let(:field) do
+        <<~FIELD
+          ..~~.........~~~
+          ..~~~.+..#..~~~.
+          ..~~~....#..~~..
+          .........1......
+          ......0.........
+          ..~~..#....~~~..
+          .~~~..#..+.~~~..
+          ~~~.........~~..
+        FIELD
+      end
+
+      context "when there's a timeout likely due to tons of trees" do
+        let(:input) do
+          <<~INPUT
+            5 0 5 5 0 8
+            12 9 8 20 5 0
+            31
+            PLUM 10 1 4 12 3 0
+            PLUM 5 6 4 12 3 0
+            PLUM 15 2 4 12 3 0
+            PLUM 0 5 4 12 3 0
+            PLUM 10 7 4 12 3 0
+            PLUM 5 0 4 12 3 0
+            LEMON 4 7 4 12 3 0
+            LEMON 11 0 4 12 3 0
+            APPLE 8 7 4 20 3 0
+            APPLE 7 0 4 20 3 0
+            APPLE 14 4 4 20 3 0
+            APPLE 1 3 4 20 3 0
+            BANANA 7 3 4 3 2 5
+            BANANA 7 2 4 6 3 0
+            BANANA 8 5 4 6 3 0
+            BANANA 7 1 4 6 3 0
+            BANANA 8 6 4 6 3 0
+            PLUM 10 2 4 12 0 4
+            LEMON 10 0 4 12 3 0
+            LEMON 9 0 4 12 3 0
+            APPLE 8 1 4 20 1 4
+            LEMON 11 3 4 12 0 1
+            PLUM 11 2 4 12 3 0
+            APPLE 12 4 4 20 3 0
+            APPLE 11 4 4 20 3 0
+            BANANA 5 4 3 5 0 1
+            APPLE 10 4 2 5 0 2
+            BANANA 5 3 3 5 0 4
+            BANANA 5 2 2 4 0 1
+            BANANA 6 3 1 3 0 5
+            BANANA 8 4 1 2 0 5
+            5
+            0 0 6 3 1 1 1 1 0 0 0 1 0 0
+            1 1 8 4 1 1 1 1 0 0 0 0 0 0
+            2 1 7 3 2 2 1 0 0 0 0 2 0 0
+            3 1 10 3 2 2 1 0 2 0 0 0 0 0
+            4 0 7 4 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command in time" do
+          is_expected.to start_with("MSG chop warz; MOVE 4 8 4")
+        end
+      end
+    end
+
     # EXAMPLE
-    context "when seed= |" do
+    context "with seed=" do
       let(:field) do
         <<~FIELD
 
         FIELD
       end
 
-      let(:input) do
-        <<~INPUT
+      context "when " do
+        let(:input) do
+          <<~INPUT
 
-        INPUT
-      end
+          INPUT
+        end
 
-      xit "returns " do
-        is_expected.to eq("TODO")
+        xit "returns " do
+          is_expected.to eq("TODO")
+        end
       end
     end
   end
