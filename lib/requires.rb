@@ -17,3 +17,23 @@ class String
     split[1].to_i
   end
 end
+
+module QuickMaxBy
+  def quick_max_by(&block)
+    if one?
+      first
+    else
+      max_by(&block)
+    end
+  end
+  def quick_min_by(&block)
+    if one?
+      first
+    else
+      min_by(&block)
+    end
+  end
+end
+
+Array.include QuickMaxBy
+Set.include QuickMaxBy
