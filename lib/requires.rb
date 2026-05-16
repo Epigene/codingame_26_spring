@@ -7,6 +7,17 @@ def debug(message)
   STDERR.puts message
 end
 
+def ms(label, &block)
+  t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  result = block.call
+  t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+  elapsed_ms = (t1 - t0) * 1000.0
+  debug "#{label} #{elapsed_ms.round}ms"
+
+  result
+end
+
 # Monkeypatching String '1 -1' to behave like a Point, have x, y
 class String
   def x

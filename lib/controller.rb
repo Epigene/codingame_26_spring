@@ -7,6 +7,34 @@ Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
   def can_afford?(cost_hash)
     cost_hash.all? { |type, count| send(type.downcase) >= count }
   end
+
+  # @return [String, nil] # "1 1 1 1"
+  def best_intermediate_worker(existing_worker_count)
+    tiers = [
+      best_affordable_train_tier("PLUM", 3, existing_worker_count),
+      carry = best_affordable_train_tier("LEMON", 2, existing_worker_count),
+      best_affordable_train_tier("APPLE", carry, existing_worker_count),
+      best_affordable_train_tier("IRON", carry, existing_worker_count)
+    ]
+
+    return if tiers.any?(&:zero?)
+
+    tiers.join(" ")
+  end
+
+  # @type LEMON etc. Caller neets to know that PLUM == movespeed etc.
+  def best_affordable_train_tier(type, allowed_max, existing_worker_count)
+    store = send(type.downcase)
+    if store >= (existing_worker_count+(3**2))
+      [allowed_max, 3].min
+    elsif store >= (existing_worker_count+(2**2))
+      [allowed_max, 2].min
+    elsif store >= (existing_worker_count+1)
+      1
+    else
+      0
+    end
+  end
 end
 Cell = Struct.new(:x, :y, :worker, :tree)
 TREE_HEALTH_MATRIX = {
@@ -113,7 +141,7 @@ end
 class Controller
   attr_reader :field, :turn, :input, :grid,
     :my_camp, :opp_camp, :my_inventory, :opp_inventory,
-    :cells, :trees, :workers
+    :cells, :trees, :workers, :chopper
 
   # Trees differ in cooldown and health as follows: | TRAIN moveSpeed carryCapacity harvestPower chopPower
   #                     PLUM	LEMON	APPLE	BANANA
@@ -132,8 +160,11 @@ class Controller
 
   # @param field String # multiline heredoc style
   def initialize(field:)
+    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     @field = field
     init_grid
+    t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    debug("|| Field init took #{((t1 - t0) * 1000).round}ms")
   end
 
   def inspect
@@ -147,7 +178,6 @@ class Controller
     @turn = turn
     debug(@input = input)
     init_turn_variables!
-
     @commands = []
 
     # hardcoded experiments
@@ -155,11 +185,25 @@ class Controller
     # return "MOVE 0 8 5" if turn == 2
     # return "PICK 0 LEMON" if turn == 3
 
-    if my_workers.size < 2
-      if my_inventory.can_afford?(best_worker_cost)
-        debug("== OK, time to get a chopper and start chopping!")
-        @commands << "TRAIN 2 4 0 3" # "TRAIN 1 1 1 0"
+    if turn <= 1
+      # 5, 17, 0, 10
+      turns_till_chopper =
+        -[my_inventory.plum - 5, 0].min * 5 +
+        -[my_inventory.lemon - 17, 0].min * 5 +
+        -[my_inventory.iron - 10, 0].min * shortest_path_to_mining.size * 2
+
+      # in how many turns is it OK to scale straight to chopper. Can probably go lower than 70, maybe 50.
+      if turns_till_chopper > 70
+        potential_worker = my_inventory.best_intermediate_worker(my_workers.size)
+        if potential_worker
+          @commands << "TRAIN #{potential_worker}"
+        end
       end
+    end
+
+    if chopper.nil? && my_inventory.can_afford?(best_worker_cost)
+      debug("== OK, time to get a chopper and start chopping!")
+      @commands << "TRAIN 2 4 0 3" # "TRAIN 1 1 1 0"
     end
 
     # Initial boosting has one goal - be able to afford an excellent chopper worker.
@@ -167,16 +211,11 @@ class Controller
     #  1. Reach 17 lemons
     #  2. 10 iron
     #  3. 5 plums (easy)
-    if my_workers.size == 1 && @commands.none? { _1.start_with?("TRAIN") }
-      # TODO, maybe check if a cheap helper can be afforded and useful, usually should be
-
+    if chopper.nil? && @commands.none? { _1.match?(%r'TRAIN \d+ \d+ 0') }
       ensure_sufficient_lemon_growth if my_inventory.lemon < 17
       return @commands.join("; ") if @commands.any?
 
       ensure_sufficient_plum_growth if my_inventory.plum < 5
-      return @commands.join("; ") if @commands.any?
-
-      gather_iron(my_workers.first) if my_inventory.iron < 10
       return @commands.join("; ") if @commands.any?
 
       gather_initial_fruit(my_workers.first, "LEMON", _max_wait = 5) if my_inventory.lemon < 17
@@ -185,11 +224,15 @@ class Controller
       gather_initial_fruit(my_workers.first, "PLUM", _max_wait = 5) if my_inventory.plum < 5
       return @commands.join("; ") if @commands.any?
 
+      # Iron gathering is low prio because it can't be denied
+      gather_iron(my_workers.first) if my_inventory.iron < 10
+      return @commands.join("; ") if @commands.any?
+
       gather_initial_fruit(my_workers.first, "LEMON", _max_wait = 30) if my_inventory.lemon < 17
       return @commands.join("; ") if @commands.any?
     end
 
-    organize_chopping if my_workers.size > 1
+    organize_chopping if chopper
     organize_chopper_helpers
 
     (result = @commands.join("; ")) == "" ? "WAIT" : result
@@ -324,6 +367,7 @@ class Controller
 
   def organize_chopping
     chopper = my_workers.max_by(&:carry_capacity)
+    return if chopper.chop_power < 3
 
     # 0. unload if carrying wood for some reason
     if chopper.carry_wood.positive?
@@ -669,6 +713,7 @@ class Controller
       @cells["#{x} #{y}"].tree = tree
     end
 
+    @chopper ||= nil
     @workers = []
     lines.shift.to_i.times do
       id, player, x, y, move_speed, carry_capacity, harvest_power, chop_power, carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood = lines.shift.split.map(&:to_i)
@@ -682,6 +727,10 @@ class Controller
 
       @cells["#{x} #{y}"] ||= Cell.new(x, y, nil, nil)
       @cells["#{x} #{y}"].worker = worker
+
+      if worker.my? && worker.chop_power > 2
+        @chopper = worker
+      end
     end
   end
 
@@ -714,42 +763,65 @@ class Controller
       grid.remove_connection(next_to_camp, opp_camp.node)
     end
 
-    grass_nodes.each do |grass_node|
-      wet_nodes << grass_node if @grid.n4(grass_node).any? { water_nodes.include?(_1) }
-      mining_nodes << grass_node if @grid.n4(grass_node).any? { iron_nodes.include?(_1) }
-    end
-
-    #== precrunching shortest paths between all grass nodes and from camp to grass nodes
-    grass_nodes.each do |grass_node|
-      shortest_path(my_camp.node, grass_node)
-    end
-
-    grid.neighbors(my_camp.node).each do |node|
+    ms(">> wet/mining hybrid node init") do
       grass_nodes.each do |grass_node|
-        shortest_path(node, grass_node)
+        wet_nodes << grass_node if @grid.n4(grass_node).any? { water_nodes.include?(_1) }
+        mining_nodes << grass_node if @grid.n4(grass_node).any? { iron_nodes.include?(_1) }
+      end
+    end
+
+    ms(">> dropoff points -> all grass init") do
+      grid.neighbors(my_camp.node).each do |node|
+        grass_nodes.each do |grass_node|
+          shortest_path(node, grass_node)
+        end
       end
     end
     #==
 
-    wet_nodes_within_3_of_camp
-    seed_node
+    ms("> tail-end of init") do
+      ms(">> wet node init") { wet_nodes_within_3_of_camp }
+      ms(">> seed note init") { seed_node }
 
-    grass_nodes.each do |grass_node|
-      shortest_path(grass_node, seed_node)
+      ms(">> grass -> seed node init") do
+        grass_nodes.each do |grass_node|
+          shortest_path(grass_node, seed_node)
+        end
+      end
+
+      ms(">> w3 of camp except seed") { nodes_within_3_of_camp_except_seed }
+
+      ms(">> dropoffs -> mining init") do
+        mining_nodes.each do |mining_node|
+          grid.neighbors(my_camp.node).each do |grass_node|
+            shortest_path(grass_node, mining_node)
+          end
+        end
+      end
     end
-
-    nodes_within_3_of_camp_except_seed
 
     nil
   end
 
   def shortest_path(from, to)
     key = [from, to]
-    return shortest_paths[key] if shortest_paths.key?(key)
-    path = grid.shortest_path(*key)
+    path = shortest_paths[key] || grid.shortest_path(*key)
 
-    shortest_paths[key.reverse] = path.reverse
-    shortest_paths[key] = path
+    shortest_paths[key.reverse] ||= path.reverse
+    shortest_paths[key] ||= path
+
+    # also producing n-1 longth subpaths for ease of further navigation
+    if (subpaths_exist = path.first(3).size == 3)
+      key = [path[0], path[-2]]
+      shortest_paths[key] ||= path[0..-2]
+      shortest_paths[key.reverse] ||= path[0..-2].reverse
+
+      key = [path[1], path[-1]]
+      shortest_paths[key] ||= path[1..-1]
+      shortest_paths[key.reverse] ||= path[1..-1].reverse
+    end
+
+    path
   rescue => e
     debug("XX Could not get path from #{from} to #{to}")
     raise
@@ -807,6 +879,15 @@ class Controller
 
   def mining_nodes
     @mining_nodes ||= Set.new
+  end
+
+  # @return Array<Node>
+  def shortest_path_to_mining
+    shortest_path_to_mining ||= mining_nodes.flat_map do |mining_node|
+      grid.neighbors(my_camp.node).map do |n|
+        shortest_path(n, mining_node)
+      end
+    end.min_by { _1.size }
   end
 
   def iron_nodes

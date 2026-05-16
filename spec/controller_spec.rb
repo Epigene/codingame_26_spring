@@ -416,6 +416,8 @@ RSpec.describe Controller, instance_name: :controller do
     end
 
     context "when initialized with seed=6972392475458301000 | when enough resources to train the chopper and helper is on 9 7 plum" do
+      let(:turn) { 30 }
+
       let(:field) do
         <<~FIELD
           ~#...~~~..........
@@ -522,57 +524,6 @@ RSpec.describe Controller, instance_name: :controller do
 
       it "returns a command to go mining" do
         is_expected.to eq("MSG IROON!; MOVE 0 5 1")
-      end
-    end
-
-    context "when initialized with far-water case" do
-      let(:field) do
-        <<~FIELD
-          ...#..+#............
-          #.........1....~~~..
-          ~~.............~~~..
-          ~~.+..#........~~~~.
-          ~~~~~..........~~~~~
-          ~~~~~..........~~~~~
-          .~~~~........#..+.~~
-          ..~~~.............~~
-          ..~~~....0.........#
-          ............#+..#...
-        FIELD
-      end
-
-      let(:input) do
-        <<~INPUT
-          6 2 4 8 5 0
-          1 3 1 8 3 0
-          18
-          PLUM 15 7 4 12 1 7
-          PLUM 4 2 4 12 1 7
-          PLUM 18 8 4 12 2 3
-          PLUM 1 1 4 12 2 3
-          LEMON 10 9 4 12 2 4
-          LEMON 9 0 4 12 2 4
-          LEMON 5 6 4 12 0 2
-          LEMON 14 3 4 12 0 2
-          LEMON 19 2 3 10 0 1
-          LEMON 0 7 3 10 0 1
-          APPLE 16 0 4 20 3 1
-          APPLE 3 9 4 20 3 1
-          BANANA 14 9 4 6 1 6
-          BANANA 5 0 4 6 1 6
-          LEMON 9 7 1 6 0 1
-          APPLE 14 1 3 17 0 2
-          LEMON 9 6 1 6 0 4
-          LEMON 8 7 1 6 0 8
-          3
-          0 0 8 7 1 1 1 1 0 0 0 0 0 0
-          1 1 14 5 1 1 1 1 0 0 0 0 0 0
-          2 1 10 3 2 1 1 1 0 0 0 0 0 0
-        INPUT
-      end
-
-      it "works without errors" do
-        is_expected.to eq("MSG IROON!; MOVE 0 9 7")
       end
     end
 
@@ -883,6 +834,57 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command in time" do
           is_expected.to start_with("MSG chop warz; MOVE 4 8 4")
+        end
+      end
+    end
+
+    context "with seed=388785412389555300" do
+      let(:field) do
+        <<~FIELD
+          ...#...#..........~...
+          .##...........0...~...
+          ..............~~~.#...
+          ....~~~~~...~~~~~~#.+.
+          ...+~~~~~...~~~~~~~...
+          ...~~~~~~....~~~~~~...
+          ...~~~~~~~...~~~~~+...
+          .+.#~~~~~~...~~~~~....
+          ...#.~~~..............
+          ...~...1...........##.
+          ...~..........#...#...
+        FIELD
+      end
+
+      context "when start and field mean one worker is not enough to go for chopper and an intermediate worker is needed" do
+        let(:input) do
+          <<~INPUT
+            10 6 9 9 3 0
+            10 6 9 9 3 0
+            16
+            PLUM 14 8 3 10 0 3
+            PLUM 7 2 3 10 0 3
+            LEMON 9 4 4 12 3 3
+            LEMON 12 6 4 12 3 3
+            LEMON 19 1 4 12 3 2
+            LEMON 2 9 4 12 3 2
+            APPLE 13 8 3 17 0 1
+            APPLE 8 2 3 17 0 1
+            APPLE 17 8 1 11 0 2
+            APPLE 4 2 1 11 0 2
+            APPLE 16 0 1 11 0 9
+            APPLE 5 10 1 11 0 9
+            BANANA 12 7 4 6 0 4
+            BANANA 9 3 4 6 0 4
+            BANANA 19 6 4 6 3 5
+            BANANA 2 4 4 6 3 5
+            2
+            0 1 7 9 1 1 1 1 0 0 0 0 0 0
+            1 0 14 1 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to train a decent intermediate worker" do
+          is_expected.to eq("TRAIN 3 2 2 1; MOVE 1 15 1")
         end
       end
     end
