@@ -12,6 +12,10 @@ Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
     cost_hash.all? { |type, count| send(type.downcase) >= count }
   end
 
+  def score
+    plum + lemon + apple + banana + (4 * wood)
+  end
+
   # @return [String, nil] # "1 1 1 1"
   def best_intermediate_worker(existing_worker_count)
     tiers = [
@@ -205,7 +209,8 @@ class Controller
     :my_camp, :opp_camp, :my_inventory, :opp_inventory,
     :cells, :trees,
     :workers, :helper, :inter, :chopper,
-    :training, :messages, :plans
+    :training, :messages, :plans,
+    :distance_between_camps
 
   # Trees differ in cooldown and health as follows: | TRAIN moveSpeed carryCapacity harvestPower chopPower
   #                     PLUM	LEMON	APPLE	BANANA
@@ -422,6 +427,17 @@ class Controller
   end
 
   def organize_helper(worker)
+    # WAR, seek to fight over chopping if opp within 2 turns can be cought
+    chop_wars(worker)
+    return if plans[worker.id]
+
+    # ENDGAME, I'm winning, let's liquidate
+    if my_inventory.score > opp_inventory.score + 40 && trees.size < 6
+      tree = trees.min_by { shortest_path(worker.node, _1.node) }
+      go_and_chop(worker, tree.node) if tree
+    end
+    return if plans[worker.id]
+
     # Initial boosting has one goal - be able to afford an excellent chopper worker.
     # It consists of 3 subgoals:
     #  1. Reach 17 lemons
@@ -502,7 +518,15 @@ class Controller
   end
 
   def organize_intermediate(worker)
-    chop_wars(worker)
+    chop_wars(worker) if chopper.nil?
+    return if plans[worker.id]
+
+    # ENDGAME, I'm winning, let's liquidate
+    if my_inventory.score > opp_inventory.score + 40 && trees.size < 6
+      tree = trees.min_by { shortest_path(worker.node, _1.node) }
+      messages << "endgame"
+      go_and_chop(worker, tree.node) if tree
+    end
     return if plans[worker.id]
 
     if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
@@ -537,7 +561,7 @@ class Controller
     harvest_closest_harvestable(worker)
     return if plans[worker.id]
 
-    raise("hmm, inter has nothing to do")
+    debug("== hmm, inter has nothing to do")
   end
 
   # Regular harvesting
@@ -866,24 +890,26 @@ class Controller
   end
 
   def chop_wars(worker)
-    # WAR, seek to fight over chopping if opp within 2 turns can be cought
-    opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
-    return if opp_workers_chopping.none?
+    xms(">> CHOP WARS calc for worker #{worker}") do
+      # WAR, seek to fight over chopping if opp within 2 turns can be cought
+      opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
+      return if opp_workers_chopping.none?
 
-    chops = opp_workers_chopping.map do |opp_worker|
-      tree = cells[opp_worker.node].tree
-      path = shortest_path(worker.node, opp_worker.node)
-      turns_to_reach = ((path.size - 1) / worker.move_speed.to_f).ceil
-      turns_to_fell = tree.chop_turns(opp_worker.chop_power)
-      [path, turns_to_reach, turns_to_fell]
-    end
+      chops = opp_workers_chopping.map do |opp_worker|
+        tree = cells[opp_worker.node].tree
+        path = shortest_path(worker.node, opp_worker.node)
+        turns_to_reach = ((path.size - 1) / worker.move_speed.to_f).ceil
+        turns_to_fell = tree.chop_turns(opp_worker.chop_power)
+        [path, turns_to_reach, turns_to_fell]
+      end
 
-    interceptable_chops = chops.select { |p, to_reach, to_fell| to_reach <= 2 && (to_reach + 1) <= to_fell }
-    if interceptable_chops.any?
-      path, _, _ = interceptable_chops.quick_max_by { |p, to_reach, to_fell| cells[p.last].tree.size }
+      interceptable_chops = chops.select { |p, to_reach, to_fell| to_reach <= 2 && (to_reach + 1) <= to_fell }
+      if interceptable_chops.any?
+        path, _, _ = interceptable_chops.quick_max_by { |p, to_reach, to_fell| cells[p.last].tree.size }
 
-      messages << "chop warz"
-      return go_and_chop(worker, path.last)
+        messages << "chop warz"
+        return go_and_chop(worker, path.last)
+      end
     end
   end
 
@@ -996,12 +1022,16 @@ class Controller
       end
     end
 
+    # == camp distances and areas
+    @distance_between_camps = [grid.shortest_path(my_camp.node, opp_camp.node).size - 2, 0].max
+
     grid.n4(my_camp.node).each do |next_to_camp|
       grid.remove_connection(next_to_camp, my_camp.node)
     end
     !opp_camp.nil? && grid.n4(opp_camp.node).each do |next_to_camp|
       grid.remove_connection(next_to_camp, opp_camp.node)
     end
+    # ==
 
     ms(">> wet/mining hybrid node init") do
       grass_nodes.each do |grass_node|
@@ -1021,6 +1051,17 @@ class Controller
 
     ms(">> wet node init") { wet_nodes_within_3_of_camp }
     ms(">> seed note init") { seed_node }
+
+    ms(">> contested node init") do
+      grass_nodes.each do |grass_node|
+        my_path = shortest_path(my_camp.node, grass_node).size
+        opp_path = shortest_path(opp_camp.node, grass_node).size
+
+        if my_path < opp_path && opp_path > distance_between_camps
+          my_nodes << grass_node
+        end
+      end
+    end
 
     #===
     return if defined?(LOCAL)
@@ -1119,12 +1160,18 @@ class Controller
   # A special node either next to water with 2+ neighboring cells close to camp or a next-to-camp cell
   # where a banana for continuous replanting will be planted and never chopped
   def seed_node
-    @seed_node ||=
+    return @seed_node if defined?(@seed_node)
+
+    @seed_node =
       if wet_nodes_within_3_of_camp.any?
         wet_nodes_within_3_of_camp.max_by { (grid.neighbors(_1) & nodes_within_3_of_camp).size }
       else
         nodes_within_3_of_camp.max_by { (grid.neighbors(_1) & nodes_within_3_of_camp).size }
       end
+
+    debug("== Seed node is #{@seed_node}")
+
+    @seed_node
   end
 
   def dropoff_nodes
@@ -1159,6 +1206,11 @@ class Controller
 
   def iron_nodes
     @iron_nodes ||= Set.new
+  end
+
+  # Taken to mean nodes not only closer to my camp but also "behind" my camp from opp's perspective
+  def my_nodes
+    @my_nodes ||= Set.new
   end
 
   def tree_period_mapping

@@ -18,6 +18,10 @@ def ms(label, &block)
   result
 end
 
+def xms(label, &block)
+  block.call
+end
+
 # Monkeypatching String '1 -1' to behave like a Point, have x, y
 class String
   def x

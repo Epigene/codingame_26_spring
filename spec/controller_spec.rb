@@ -171,14 +171,15 @@ RSpec.describe Controller, instance_name: :controller do
     context "when a field has camp" do
       let(:field) do
         <<~FIELD
-          ...
-          .0.
-          ...
+          .....
+          .0.1.
+          .....
         FIELD
       end
 
       it "inits the grid such that camp can be left by trolls, but never returned to" do
         expect(controller.grid["1 0"]).to eq(["0 0", "2 0"].to_set)
+        expect(controller.grid["0 1"]).to eq(["0 0", "0 2"].to_set)
         expect(controller.grid["1 1"].size).to eq(4)
       end
     end
@@ -970,42 +971,6 @@ RSpec.describe Controller, instance_name: :controller do
         end
       end
 
-      context "when intermediate worker is off to iron and helper has few good options" do
-        let(:input) do
-          <<~INPUT
-            1 1 4 9 1 0
-            5 1 7 9 1 0
-            17
-            PLUM 14 8 4 12 0 3
-            PLUM 7 2 4 12 0 3
-            LEMON 9 4 4 12 3 0
-            LEMON 12 6 4 12 3 0
-            LEMON 19 1 4 12 3 0
-            LEMON 2 9 4 12 3 0
-            APPLE 13 8 4 20 1 2
-            APPLE 8 2 4 20 1 2
-            APPLE 17 8 2 14 0 1
-            APPLE 4 2 2 14 0 1
-            APPLE 16 0 1 11 0 6
-            APPLE 5 10 1 11 0 6
-            BANANA 12 7 4 6 0 1
-            BANANA 9 3 4 6 0 1
-            BANANA 19 6 4 6 3 2
-            BANANA 2 4 4 6 3 2
-            LEMON 15 1 1 6 0 3
-            4
-            0 1 8 9 1 1 1 1 0 0 0 0 0 0
-            1 0 15 1 1 1 1 1 0 0 0 0 0 0
-            2 0 8 1 3 2 2 1 0 0 0 0 0 0
-            3 1 8 8 2 2 1 1 0 0 0 0 0 0
-          INPUT
-        end
-
-        it "returns a a command for helper to pick a banana for planting as a fallback while waiting" do
-          is_expected.to eq("MSG IROON!; PICK 1 PLUM; MOVE 2 5 1")
-        end
-      end
-
       context "when helper has just picked up a banana" do
         let(:input) do
           <<~INPUT
@@ -1038,7 +1003,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for helper to go plant closer to seed in prep for lemon gathering" do
-          is_expected.to eq("MSG IROON!; MOVE 1 16 1; MOVE 2 3 2")
+          is_expected.to eq("MSG trns till PLUM 2; MOVE 1 16 1; MOVE 2 7 2")
         end
       end
 
@@ -1418,6 +1383,92 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a simple command to have inter go for closest apple at 17 1" do
           is_expected.to eq("MSG IROON!, trns till APPLE 3; MOVE 1 15 4; MOVE 2 16 3")
+        end
+      end
+
+      context "when helper is already harvesting lemon and some apples are missing" do
+        let(:turn) { 145 }
+
+        let(:input) do
+          <<~INPUT
+            0 1 0 9 0 0
+            3 8 2 6 1 4
+            24
+            PLUM 1 9 4 12 3 0
+            PLUM 20 1 4 12 3 0
+            LEMON 16 5 4 12 3 0
+            LEMON 5 5 4 12 3 0
+            APPLE 1 7 4 20 3 0
+            APPLE 20 3 4 20 3 0
+            APPLE 4 9 4 20 3 0
+            APPLE 17 1 4 17 3 0
+            APPLE 7 0 4 20 3 0
+            APPLE 14 10 4 20 3 0
+            BANANA 10 9 4 6 3 0
+            BANANA 11 1 4 6 3 0
+            BANANA 4 6 4 6 3 0
+            BANANA 17 4 4 6 3 0
+            BANANA 12 4 4 6 3 0
+            BANANA 13 4 4 3 0 1
+            LEMON 6 5 4 12 3 0
+            LEMON 7 6 4 12 3 0
+            APPLE 4 10 4 20 3 0
+            APPLE 3 7 4 20 2 1
+            APPLE 2 9 4 20 3 0
+            PLUM 4 4 4 12 3 0
+            LEMON 8 5 4 12 3 3
+            LEMON 9 6 4 12 0 2
+            6
+            0 1 6 5 1 1 1 1 1 0 0 0 0 0
+            1 0 12 4 1 1 1 1 0 0 0 0 0 0
+            2 0 16 5 2 1 1 1 0 0 0 0 0 0
+            3 1 17 1 2 2 1 1 0 1 0 0 0 0
+            4 1 3 7 2 2 1 1 0 0 2 0 0 0
+            5 0 13 4 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a simple command to have inter go for closest apple at 17 1" do
+          is_expected.to eq("CHOP 5; HARVEST 1; HARVEST 2")
+        end
+      end
+    end
+
+    context "with seed=4208699414688448500" do
+      let(:field) do
+        <<~FIELD
+          .~##...+..~....#
+          .~+..#....~~....
+          ......#...~.#...
+          ....1...........
+          ...........0....
+          ...#.~...#......
+          ....~~....#..+~.
+          #....~..+...##~.
+        FIELD
+      end
+
+      context "when its endgame, I am leading superbly" do
+        let(:input) do
+          <<~INPUT
+            14 13 6 0 1 84
+            5 8 4 3 0 68
+            3
+            APPLE 14 3 4 20 1 4
+            BANANA 10 4 3 5 0 4
+            BANANA 10 3 1 3 0 3
+            6
+            0 1 8 3 1 1 1 1 0 0 0 0 0 0
+            1 0 10 4 1 1 1 1 0 0 0 0 0 0
+            2 0 11 3 1 2 1 2 0 0 0 0 0 0
+            3 1 5 3 2 2 2 2 0 0 0 0 0 2
+            4 1 10 4 3 3 0 3 0 0 0 0 0 2
+            5 0 11 5 2 4 0 3 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns commands to chop everything down" do
+          is_expected.to eq("MSG endgame; DROP 5; CHOP 1; MOVE 2 10 3")
         end
       end
     end
