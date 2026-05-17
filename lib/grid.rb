@@ -150,6 +150,7 @@ class Grid
   end
 
   # Uses bi-directional path lookup approach, 40% more efficient than naive dijkstra
+  # @return [Array<Node>, nil]
   def shortest_path(start, goal, excluding: nil)
     return [start] if start == goal
 

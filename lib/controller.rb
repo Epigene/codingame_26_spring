@@ -670,11 +670,10 @@ class Controller
 
       if chopper.node == growest # already there!
         debug("== Chopper waiting on a growing tree")
+        return
       else # go if not there
-        path = shortest_path(chopper.node, growest)
-        plans[worker.id] = Plan.new("MOVE", worker.id, nil, path[chopper.move_speed] || path.last)
+        return go(chopper, growest)
       end
-      return
     end
 
     debug("== Hmmmm, no choppable nor growing trees, helper slacking off?")
@@ -705,7 +704,10 @@ class Controller
   # a generic going. Checks about having reached should occur beforehand in callers.
   def go(worker, node)
     excludable = plans[chopper&.id]&.node
-    path = shortest_path(worker.node, node, excluding: excludable ? [excludable] : nil)
+
+    path =
+      shortest_path(worker.node, node, excluding: excludable ? [excludable] : nil) ||
+      shortest_path(worker.node, node)
 
     plans[worker.id] = Plan.new("MOVE", worker.id, nil, path[worker.move_speed] || path.last)
   end
@@ -770,6 +772,11 @@ class Controller
     else
       closest_fruit = trees.select { _1.type?(fruit_type) }
         .min_by { _1.turns_till_fruit(worker, shortest_path(worker.node, _1.node)) }
+
+      unless closest_fruit
+        debug("== Wow, I have no #{fruit_type} at camp and no trees on map")
+        return false
+      end
 
       messages << "getting seed #{fruit_type}"
       return go_and_harvest(worker, closest_fruit.node)
@@ -955,15 +962,27 @@ class Controller
     nil
   end
 
+  # @return [Array<Node>, nil]
   def shortest_path(from, to, excluding: nil)
     raise(":from is nil, debug!") if from.nil?
     raise(":to is nil, debug!") if to.nil?
 
     key = [from, to, excluding]
-    path = shortest_paths[key] || grid.shortest_path(from, to, excluding: excluding)
+
+    path =
+      if shortest_paths.key?(key)
+        shortest_paths[key]
+      else
+        grid.shortest_path(from, to, excluding: excluding)
+      end
 
     r_key = [to, from, excluding]
-    shortest_paths[r_key] ||= path.reverse
+    shortest_paths[r_key] =
+      if path
+        path.reverse
+      else
+        nil
+      end
 
     # also producing n-1 longth subpaths for ease of further navigation
     if excluding.nil? && (subpaths_exist = path.first(3).size == 3)
