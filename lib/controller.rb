@@ -272,6 +272,11 @@ class Controller
         (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 30))
 
+      if plans[worker.id].nil?
+        debug("== Hmm, few good options for helper, filling time by planting 'nanas")
+        seek_to_plant_banana(worker)
+      end
+
       raise("not clear how helper could help scale to chopper!") if plans[worker.id].nil?
     end
     return if plans[worker.id]
@@ -318,6 +323,10 @@ class Controller
       return
     end
 
+    seek_to_plant_banana(worker)
+  end
+
+  def seek_to_plant_banana(worker)
     if worker.carry_banana.positive?
       # 1. seek to plant a banana on seed node
       if cells[seed_node]&.tree.nil?
@@ -328,9 +337,10 @@ class Controller
       closest = nodes_within_3_of_camp_except_seed
         .select { cells[_1]&.tree.nil? }
         .min_by do |node|
-          shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size -
-            # wetness is treated as being 2 squares closer, giving a massive edge
-            (wet_nodes.include?(node) ? 2 : 0)
+          shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size +
+            shortest_path(seed_node, node).size -
+            # wetness is treated as being half a square closer, giving a tiebreaking advantage
+            (wet_nodes.include?(node) ? 0.5 : 0)
         end
 
       if closest
