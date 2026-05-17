@@ -73,6 +73,54 @@ RSpec.describe Tree, instance_name: :tree do
     end
   end
 
+  describe "#fruits_at_arrival(turns)" do
+    subject(:fruits_at_arrival) { tree.fruits_at_arrival(turns) }
+
+    context "when asking about a just-planted apple, the longest" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 1, 1, 0, 9, 9) }
+      # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+
+      it "returns correct timings", :aggregate_failures do
+        expect(tree.fruits_at_arrival(0)).to eq(0)
+        expect(tree.fruits_at_arrival(1)).to eq(0)
+        expect(tree.fruits_at_arrival(35)).to eq(0)
+        expect(tree.fruits_at_arrival(36)).to eq(1)
+        expect(tree.fruits_at_arrival(45)).to eq(2)
+        expect(tree.fruits_at_arrival(54)).to eq(3)
+        expect(tree.fruits_at_arrival(63)).to eq(3) # no more than 3
+      end
+    end
+
+    context "when asking about a wet banana" do
+      let(:tree) { described_class.new("BANANA", 0, 0, 3, 1, 0, 1, 4) }
+
+      it "returns correct timings", :aggregate_failures do
+        expect(tree.fruits_at_arrival(0)).to eq(0)
+        expect(tree.fruits_at_arrival(1)).to eq(0)
+        expect(tree.fruits_at_arrival(4)).to eq(0)
+        expect(tree.fruits_at_arrival(5)).to eq(1)
+        expect(tree.fruits_at_arrival(9)).to eq(2)
+        expect(tree.fruits_at_arrival(13)).to eq(3)
+        expect(tree.fruits_at_arrival(20)).to eq(3) # no more than 3
+      end
+    end
+
+    context "when asking about a wet PLUM" do
+      let(:tree) { described_class.new("BANANA", 0, 0, 4, 1, 1, 2, 3) }
+      # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+
+      it "returns correct timings", :aggregate_failures do
+        expect(tree.fruits_at_arrival(0)).to eq(1)
+        expect(tree.fruits_at_arrival(1)).to eq(1)
+        expect(tree.fruits_at_arrival(2)).to eq(2)
+        expect(tree.fruits_at_arrival(3)).to eq(2)
+        expect(tree.fruits_at_arrival(4)).to eq(2)
+        expect(tree.fruits_at_arrival(5)).to eq(3)
+        expect(tree.fruits_at_arrival(8)).to eq(3) # no more than 3
+      end
+    end
+  end
+
   describe "#chop_turns(chop_speed)" do
     subject(:chop_turns) { tree.chop_turns(chop_speed) }
 
@@ -1076,6 +1124,61 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command for inter to go grab plums" do
           is_expected.to eq("MSG getting seed PLUM; MOVE 2 10 1; HARVEST 1")
+        end
+      end
+
+      context "when inter has just dropped off final iron and plums should be gathered" do
+        let(:input) do
+          <<~INPUT
+            8 20 2 7 0 40
+            1 23 5 5 1 14
+            31
+            PLUM 14 8 4 12 3 0
+            PLUM 7 2 4 12 3 0
+            LEMON 9 4 4 12 3 0
+            LEMON 12 6 4 12 3 0
+            LEMON 19 1 4 12 3 0
+            LEMON 2 9 4 12 3 0
+            APPLE 13 8 4 20 3 0
+            APPLE 8 2 4 20 3 0
+            APPLE 17 8 4 20 3 0
+            APPLE 4 2 4 20 3 0
+            APPLE 5 10 4 4 3 0
+            BANANA 12 7 4 6 3 0
+            BANANA 9 3 4 6 3 0
+            BANANA 19 6 4 6 3 0
+            BANANA 2 4 4 6 3 0
+            LEMON 15 1 4 9 3 0
+            BANANA 16 1 4 6 3 4
+            PLUM 12 2 4 12 1 2
+            LEMON 9 9 4 12 0 1
+            LEMON 6 10 4 12 0 3
+            BANANA 9 8 4 6 1 2
+            APPLE 7 10 3 9 0 3
+            BANANA 8 8 4 6 2 4
+            BANANA 14 0 3 5 0 4
+            APPLE 8 9 2 14 0 4
+            APPLE 9 10 2 14 0 6
+            BANANA 17 1 3 5 0 4
+            BANANA 10 9 2 4 0 5
+            BANANA 8 10 1 3 0 2
+            BANANA 15 0 1 3 0 3
+            BANANA 5 9 1 3 0 4
+            7
+            0 1 8 10 1 1 1 1 0 0 0 1 0 0
+            1 0 16 1 1 1 1 1 0 0 0 1 0 0
+            2 0 13 1 3 2 2 1 0 0 0 0 0 0
+            3 1 5 9 2 2 1 1 0 0 0 0 0 0
+            4 1 5 10 2 2 1 2 0 0 0 0 0 0
+            5 0 15 1 2 4 0 3 0 0 0 0 0 0
+            6 1 7 10 2 3 0 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        # Tricky case, nearby 15 1 lemon is already being chopped by chopper, so
+        # it's a choice between 8 2 apple and 9 3 banana, prefer apple, cuz it has quicker period
+        it "returns a command for inter to go to nearby apple tree to harvest" do
+          is_expected.to eq("CHOP 5; MOVE 2 10 1; MOVE 1 16 0")
         end
       end
     end

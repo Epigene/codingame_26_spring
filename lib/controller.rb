@@ -76,6 +76,29 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
     [distance_penalty, cooldown_penalty].max
   end
 
+  def fruits_at_arrival(turns)
+    return 3 if fruits == 3
+
+    turns_to_grow = grown? ? 0 : cooldown + (4 - (size + 1))*period
+
+    return 0 if turns < turns_to_grow
+
+    fruiting_turns = turns - turns_to_grow
+    # at this point the tree will have just grown
+
+    starting_cd = grown? ? cooldown : period
+    cd_left = [starting_cd - fruiting_turns, 0].max
+    return fruits if cd_left.positive?
+
+    grown_fruits = 1
+    fruiting_turns -= starting_cd
+    # as this point the tree has just produced a fruit and cd is back to full period
+
+    fruiting_periods = (fruiting_turns / period.to_f).floor
+
+    [3, fruits + fruiting_periods + grown_fruits].min
+  end
+
   def turns_till_size(desired_size)
     return 0 if size >= desired_size
 
@@ -141,6 +164,13 @@ Worker = Struct.new(:id, :player, :x, :y,
     send("carry_#{fruit_type.to_s.downcase}") >= at_least_count
   end
 
+  # @return Integer
+  def free_capacity
+    carry_capacity - (
+      carry_plum + carry_lemon + carry_apple + carry_banana + carry_iron + carry_wood
+    )
+  end
+
   def can_chop?
     chop_power.positive?
   end
@@ -155,6 +185,10 @@ Plan = Struct.new(:name, :worker_id, :type, :node, :weight) do
       worker_id,
       type
     ].compact.join(" ")
+  end
+
+  def chop?
+    name == "CHOP"
   end
 
   def weight
@@ -261,18 +295,47 @@ class Controller
   private
 
   def organize_intermediate(worker)
-    (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
-      (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
-      (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 1)) ||
-      (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 1)) ||
-      (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 2)) ||
-      (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 2)) ||
-      (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
-      (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
-      (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
-      debug("== Huh? inter has nothing to do!")
-      # (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
-      # (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
+    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+      (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
+        (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
+        (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 1)) ||
+        (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 1)) ||
+        (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 2)) ||
+        (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 2)) ||
+        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
+        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
+        (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
+        debug("== Huh? inter has nothing to do for scaling to chopper!")
+        # (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
+        # (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
+    end
+    return if plans[worker.id]
+
+    if worker.full?
+      closest_camp_n4 = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_camp_n4)
+    end
+
+    # regular harvesting
+    closest_harvestable_tree = trees.select do |tree|
+      # let's never try to harvest what chopper is cutting down
+      next false if plans[chopper&.id]&.chop? && plans[chopper.id].node == tree.node
+      next false if tree.node == seed_node
+
+      ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
+
+      turns_to_reach = ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
+
+      tree.fruits_at_arrival(_turns = turns_to_reach) >= worker.free_capacity
+    end.sort_by do |tree|
+      [shortest_path(worker.node, tree.node).size, tree.period]
+    end.first
+
+    if closest_harvestable_tree
+      return go_and_harvest(worker, closest_harvestable_tree.node)
+    end
+
+    raise("hmm, inter has nothing to do")
   end
 
   def organize_helper(worker)
@@ -680,7 +743,7 @@ class Controller
 
   def go_and_chop(worker, node)
     if worker.node == node # already there!
-      plans[worker.id] = Plan.new("CHOP", worker.id)
+      plans[worker.id] = Plan.new("CHOP", worker.id, nil, node)
     else # go if not there
       go(worker, node)
     end
