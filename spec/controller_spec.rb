@@ -917,8 +917,8 @@ RSpec.describe Controller, instance_name: :controller do
           INPUT
         end
 
-        it "returns a command for inter to get iron and helper to plant lemon he's carrying" do
-          is_expected.to eq("MOVE 2 11 1; PLANT 1 LEMON")
+        it "returns a command for inter to get iron (hard left) and helper to pick up a lemon to plant" do
+          is_expected.to eq("MSG IROON!; MOVE 2 11 1; PICK 1 LEMON")
         end
       end
     end
