@@ -287,7 +287,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "returns a command to move to a closeby harvestable plum while lemons are still at least 12 turns away" do
-        is_expected.to eq("MSG turns till PLUM 2; MOVE 0 9 7")
+        is_expected.to eq("MSG trns till PLUM 1; MOVE 0 9 7")
       end
     end
 
@@ -347,7 +347,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "returns a command to move to a nearby about-to-produce lemon tree" do
-        is_expected.to eq("MSG turns till LEMON 2; MOVE 0 9 8")
+        is_expected.to eq("MSG trns till LEMON 1; MOVE 0 9 8")
       end
     end
 
@@ -838,7 +838,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
-    context "with seed=388785412389555300" do
+    context "with seed=388785412389555300, far iron, lots of nearby water" do
       let(:field) do
         <<~FIELD
           ...#...#..........~...
@@ -961,40 +961,78 @@ RSpec.describe Controller, instance_name: :controller do
       context "when helper has just picked up a banana" do
         let(:input) do
           <<~INPUT
-            0 0 4 6 1 0
+            0 0 4 8 1 0
+            4 1 7 9 1 0
+            17
+            PLUM 14 8 4 12 0 2
+            PLUM 7 2 4 12 0 2
+            LEMON 9 4 4 12 3 0
+            LEMON 12 6 4 12 3 0
+            LEMON 19 1 4 12 3 0
+            LEMON 2 9 4 12 3 0
+            APPLE 13 8 4 20 1 1
+            APPLE 8 2 4 20 1 1
+            APPLE 17 8 3 17 0 2
+            APPLE 4 2 3 17 0 2
+            APPLE 16 0 1 11 0 5
+            APPLE 5 10 1 11 0 5
+            BANANA 12 7 4 6 1 4
+            BANANA 9 3 4 6 1 4
+            BANANA 19 6 4 6 3 1
+            BANANA 2 4 4 6 3 1
+            LEMON 15 1 1 6 0 2
+            4
+            0 1 8 9 1 1 1 1 1 0 0 0 0 0
+            1 0 15 1 1 1 1 1 0 0 0 1 0 0
+            2 0 5 1 3 2 2 1 0 0 0 0 0 0
+            3 1 10 8 2 2 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for helper to go plant closer to seed in prep for lemon gathering" do
+          is_expected.to eq("MSG IROON!; MOVE 2 3 2; MOVE 1 16 1")
+        end
+      end
+
+      context "when helper should get to about-to-fruit lemon" do
+        let(:input) do
+          <<~INPUT
+            0 0 4 6 3 0
             3 0 7 9 1 0
-            21
-            PLUM 14 8 4 12 3 3
-            PLUM 7 2 4 12 3 3
+            23
+            PLUM 14 8 4 12 3 2
+            PLUM 7 2 4 12 3 2
             LEMON 9 4 4 12 3 0
             LEMON 12 6 4 12 3 0
             LEMON 19 1 4 12 3 0
             LEMON 2 9 4 12 3 0
             APPLE 13 8 4 20 3 0
             APPLE 8 2 4 20 3 0
-            APPLE 17 8 4 20 3 2
-            APPLE 4 2 4 20 3 2
-            APPLE 16 0 2 14 0 6
-            APPLE 5 10 2 14 0 6
-            BANANA 12 7 4 6 3 4
-            BANANA 9 3 4 6 3 4
+            APPLE 17 8 4 20 3 1
+            APPLE 4 2 4 20 3 1
+            APPLE 16 0 2 14 0 5
+            APPLE 5 10 2 14 0 5
+            BANANA 12 7 4 6 3 3
+            BANANA 9 3 4 6 3 3
             BANANA 19 6 4 6 3 0
             BANANA 2 4 4 6 3 0
-            LEMON 15 1 4 12 0 3
-            PLUM 8 9 1 6 0 1
-            BANANA 16 1 2 4 0 2
-            PLUM 7 10 1 6 0 5
-            BANANA 14 0 1 3 0 5
+            LEMON 15 1 4 12 0 2
+            PLUM 8 9 2 8 0 8
+            BANANA 16 1 2 4 0 1
+            PLUM 7 10 1 6 0 4
+            BANANA 15 0 1 3 0 3
+            BANANA 14 0 1 3 0 6
+            LEMON 6 9 1 6 0 3
             4
-            0 1 6 9 1 1 1 1 0 1 0 0 0 0
-            1 0 14 0 1 1 1 1 0 0 0 1 0 0
-            2 0 13 1 3 2 2 1 0 0 0 0 2 0
-            3 1 17 8 2 2 1 1 0 0 0 0 2 0
+            0 1 6 9 1 1 1 1 0 0 0 0 0 0
+            1 0 14 0 1 1 1 1 0 0 0 0 0 0
+            2 0 13 1 3 2 2 1 0 0 0 0 0 0
+            3 1 15 8 2 2 1 1 0 0 0 0 2 0
           INPUT
         end
 
-        it "returns a command for helper to go plant closer to seed in prep for lemon gathering" do
-          is_expected.to eq("DROP 2; MOVE 1 15 0")
+        it "returns a command for helper to go get ready for lemon harvesting" do
+          is_expected.to eq("MSG IROON!, trns till LEMON 2; MOVE 2 10 1; MOVE 1 15 0")
         end
       end
     end

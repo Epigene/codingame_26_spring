@@ -64,7 +64,7 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
   #
   # @return Numeric
   def turns_till_fruit(worker, path_to)
-    distance_penalty = path_to.size
+    distance_penalty = ((path_to.size - 1) / worker.move_speed.to_f).ceil
     return distance_penalty if fruits.positive?
 
     cooldown_penalty = (4 - size) * period + cooldown
@@ -254,6 +254,7 @@ class Controller
 
   def organize_intermediate(worker)
     (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
+      (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "PLUM", 1)) ||
       (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker))
   end
 
@@ -265,17 +266,16 @@ class Controller
     #  3. 5 plums (easy)
     if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
       debug("== Helper will help scale to chopper")
-      (my_inventory.lemon < best_worker_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
+
+      seek_to_plant_carried_banana(worker) ||
+        (my_inventory.lemon < best_worker_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
         (my_inventory.plum < best_worker_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
         (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
-        (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
-        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 30))
-
-      if plans[worker.id].nil?
-        debug("== Hmm, few good options for helper, filling time by planting 'nanas")
-        seek_to_plant_banana(worker)
-      end
+        (my_inventory.iron < best_worker_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
+        (inter && seek_to_plant_banana(worker)) ||
+        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
+        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10))
 
       raise("not clear how helper could help scale to chopper!") if plans[worker.id].nil?
     end
@@ -326,27 +326,34 @@ class Controller
     seek_to_plant_banana(worker)
   end
 
-  def seek_to_plant_banana(worker)
-    if worker.carry_banana.positive?
-      # 1. seek to plant a banana on seed node
-      if cells[seed_node]&.tree.nil?
-        return go_and_plant(worker, seed_node, "BANANA")
-      end
+  def seek_to_plant_carried_banana(worker)
+    return unless worker.carry_banana.positive?
 
-      # 2. seek to plant next to seed node
-      closest = nodes_within_3_of_camp_except_seed
-        .select { cells[_1]&.tree.nil? }
-        .min_by do |node|
-          shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size +
-            shortest_path(seed_node, node).size -
-            # wetness is treated as being half a square closer, giving a tiebreaking advantage
-            (wet_nodes.include?(node) ? 0.5 : 0)
-        end
-
-      if closest
-        return go_and_plant(worker, closest, "BANANA")
-      end
+    # 1. seek to plant a banana on seed node
+    if cells[seed_node]&.tree.nil?
+      return go_and_plant(worker, seed_node, "BANANA")
     end
+
+    # 2. seek to plant next to seed node
+    closest = nodes_within_3_of_camp_except_seed
+      .select { cells[_1]&.tree.nil? }
+      .min_by do |node|
+        shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size +
+          shortest_path(seed_node, node).size -
+          # wetness is treated as being half a square closer, giving a tiebreaking advantage
+          (wet_nodes.include?(node) ? 0.5 : 0)
+      end
+
+    if closest
+      return go_and_plant(worker, closest, "BANANA")
+    end
+
+    false
+  end
+
+  def seek_to_plant_banana(worker)
+    seek_to_plant_carried_banana(worker)
+    return if plans[worker.id]
 
     # not carrying a banana, should get one
     seeding_bananas =
@@ -432,18 +439,18 @@ class Controller
     getter = "carry_#{tree_type.downcase}"
 
     if worker.node == path.last && worker.send(getter).positive?
-      plans[worker.id] = Plan.new("PLANT", worker.id, tree_type)
+      return plans[worker.id] = Plan.new("PLANT", worker.id, tree_type)
     elsif worker.send(getter).positive?
       worker_path = shortest_path(worker.node, path.last)
-      plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
+      return plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
     elsif worker.node == path[1] && worker.send(getter).zero? && my_inventory.send(tree_type.downcase).positive?
-      plans[worker.id] = Plan.new("PICK", worker.id, tree_type)
+      return plans[worker.id] = Plan.new("PICK", worker.id, tree_type)
     elsif my_inventory.send(tree_type.downcase).positive? # as in no lemon in hand, go to near camp
       worker_path = shortest_path(worker.node, path[1])
-      plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
+      return plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
     end
 
-    true
+    false
   end
 
   def gather_iron(worker)
@@ -479,8 +486,8 @@ class Controller
         return
       end
 
-      messages << "turns till #{fruit_type} #{turns_till}"
-      plans[worker.id] = Plan.new("MOVE", worker.id, nil, path_to_tree.last)
+      messages << "trns till #{fruit_type} #{turns_till}"
+      plans[worker.id] = Plan.new("MOVE", worker.id, nil, path_to_tree[worker.move_speed] || path_to_tree.last)
     end
   end
 
