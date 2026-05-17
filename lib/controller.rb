@@ -678,11 +678,11 @@ class Controller
     end
   end
 
-  def go_and_chop(chopper, node)
-    if chopper.node == node # already there!
+  def go_and_chop(worker, node)
+    if worker.node == node # already there!
       plans[worker.id] = Plan.new("CHOP", worker.id)
     else # go if not there
-      go(chopper, node)
+      go(worker, node)
     end
   end
 
