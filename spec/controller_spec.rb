@@ -966,7 +966,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for inter to get iron (hard left) and helper to pick up a lemon to plant" do
-          is_expected.to eq("MSG IROON!; MOVE 2 11 1; PICK 1 LEMON")
+          is_expected.to eq("MSG IROON!; PICK 1 LEMON; MOVE 2 11 1")
         end
       end
 
@@ -1002,7 +1002,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a a command for helper to pick a banana for planting as a fallback while waiting" do
-          is_expected.to eq("MSG IROON!; MOVE 2 5 1; PICK 1 PLUM")
+          is_expected.to eq("MSG IROON!; PICK 1 PLUM; MOVE 2 5 1")
         end
       end
 
@@ -1038,7 +1038,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for helper to go plant closer to seed in prep for lemon gathering" do
-          is_expected.to eq("MSG IROON!; MOVE 2 3 2; MOVE 1 16 1")
+          is_expected.to eq("MSG IROON!; MOVE 1 16 1; MOVE 2 3 2")
         end
       end
 
@@ -1123,7 +1123,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for inter to go grab plums" do
-          is_expected.to eq("MSG getting seed PLUM, oh LEMON; MOVE 2 10 1; HARVEST 1")
+          is_expected.to eq("MSG oh LEMON, getting seed PLUM; HARVEST 1; MOVE 2 10 1")
         end
       end
 
@@ -1178,7 +1178,7 @@ RSpec.describe Controller, instance_name: :controller do
         # Tricky case, nearby 15 1 lemon is already being chopped by chopper, so
         # it's a choice between 8 2 apple and 9 3 banana, prefer apple, cuz it has quicker period
         it "returns a command for inter to go to nearby apple tree to harvest" do
-          is_expected.to eq("CHOP 5; MOVE 2 10 1; MOVE 1 16 0")
+          is_expected.to eq("CHOP 5; MOVE 1 16 0; MOVE 2 10 1")
         end
       end
 
@@ -1226,7 +1226,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a a command for helper to take the other available path" do
-          is_expected.to eq("CHOP 5; MOVE 2 12 2; MOVE 1 15 1")
+          is_expected.to eq("CHOP 5; MOVE 1 15 1; MOVE 2 12 2")
         end
       end
     end
@@ -1282,7 +1282,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for both carry1 workers to go get iron" do
-          is_expected.to eq("MSG IROON!, IROON!; MOVE 3 16 7; MOVE 1 12 4")
+          is_expected.to eq("MSG IROON!, IROON!; MOVE 1 12 4; MOVE 3 16 7")
         end
       end
     end
@@ -1338,7 +1338,86 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a simple command to harvest it" do
-          is_expected.to eq("MSG oh PLUM; MOVE 2 17 3; HARVEST 1")
+          is_expected.to eq("MSG oh PLUM; HARVEST 1; MOVE 2 17 3")
+        end
+      end
+
+      context "when helper is already harvesting lemon diligently" do
+        let(:turn) { 15 }
+
+        let(:input) do
+          <<~INPUT
+            4 1 1 4 5 0
+            9 3 3 6 6 0
+            19
+            PLUM 1 9 4 12 1 6
+            PLUM 20 1 4 12 1 6
+            LEMON 16 5 4 12 3 0
+            LEMON 5 5 4 12 3 0
+            APPLE 1 7 4 20 3 0
+            APPLE 20 3 4 20 3 0
+            APPLE 4 9 4 20 3 0
+            APPLE 17 1 4 20 3 0
+            APPLE 7 0 4 20 1 4
+            APPLE 14 10 4 20 1 4
+            BANANA 10 9 4 6 3 0
+            BANANA 11 1 4 6 3 0
+            BANANA 4 6 4 6 3 0
+            BANANA 17 4 4 6 3 0
+            PLUM 12 3 4 12 2 1
+            BANANA 12 4 4 6 1 3
+            LEMON 14 4 4 12 1 3
+            BANANA 13 4 3 5 0 6
+            LEMON 6 5 2 8 0 1
+            3
+            0 1 7 6 1 1 1 1 0 1 0 0 0 0
+            1 0 14 4 1 1 1 1 0 0 0 0 0 0
+            2 0 14 3 2 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a simple command to have inter do something else, like go for plums" do
+          is_expected.to eq("MSG oh LEMON, trns till PLUM 2; HARVEST 1; MOVE 2 13 2")
+        end
+      end
+
+      context "when helper is already harvesting lemon and some apples are missing" do
+        let(:turn) { 45 }
+
+        let(:input) do
+          <<~INPUT
+            6 18 1 4 11 0
+            4 2 1 6 4 0
+            19
+            PLUM 1 9 4 12 3 0
+            PLUM 20 1 4 12 3 0
+            LEMON 16 5 4 12 3 0
+            LEMON 5 5 4 12 3 0
+            APPLE 1 7 4 20 3 0
+            APPLE 20 3 4 20 3 0
+            APPLE 4 9 4 20 3 0
+            APPLE 17 1 4 20 3 0
+            APPLE 7 0 4 20 3 0
+            APPLE 14 10 4 20 3 0
+            BANANA 10 9 4 6 3 0
+            BANANA 11 1 4 6 3 0
+            BANANA 4 6 4 6 3 0
+            BANANA 17 4 4 6 3 0
+            PLUM 12 3 4 12 3 0
+            BANANA 12 4 4 6 3 0
+            LEMON 14 4 4 12 1 2
+            BANANA 13 4 4 6 2 2
+            LEMON 6 5 4 12 3 0
+            4
+            0 1 6 6 1 1 1 1 0 1 0 0 0 0
+            1 0 14 4 1 1 1 1 0 0 0 0 0 0
+            2 0 14 3 2 1 1 1 0 0 0 0 0 0
+            3 1 6 5 2 2 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a simple command to have inter go for closest apple at 17 1" do
+          is_expected.to eq("MSG IROON!, trns till APPLE 3; MOVE 1 15 4; MOVE 2 16 3")
         end
       end
     end

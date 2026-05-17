@@ -187,6 +187,10 @@ Plan = Struct.new(:name, :worker_id, :type, :node, :weight) do
     ].compact.join(" ")
   end
 
+  def name?(desired_name)
+    name == desired_name
+  end
+
   def chop?
     name == "CHOP"
   end
@@ -269,9 +273,9 @@ class Controller
       @training = "TRAIN 2 4 0 3" # "TRAIN 1 1 1 0"
     end
 
-    organize_chopping if chopper
+    organize_chopping(chopper) if chopper
+    organize_helper(helper) # TODO, helper is calculated before inter because inter will be able to work around helper
     organize_intermediate(inter) if inter
-    organize_helper(helper)
 
     result = [
       messages.any? ? "MSG #{messages.join(", ")}" : nil,
@@ -301,55 +305,120 @@ class Controller
 
   private
 
-  def organize_intermediate(worker)
-    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
-      (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
-        (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
-        (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 1)) ||
-        (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 1)) ||
-        (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 2)) ||
-        (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 2)) ||
-        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
-        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
-        (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
-        debug("== Huh? inter has nothing to do for scaling to chopper!")
-        # (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
-        # (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
-    end
-    return if plans[worker.id]
-
-    if worker.full?
+  def organize_chopping(worker)
+    # 0. unload if carrying wood for some reason
+    if worker.carry_wood.positive?
       closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+
       return go_and_drop(worker, closest_dropoff)
     end
 
-    # regular harvesting
-    harvest_closest_harvestable(worker)
+    # WAR, seek to fight over chopping if opp within 2 turns can be cought
+    chop_wars(worker)
     return if plans[worker.id]
 
-    raise("hmm, inter has nothing to do")
-  end
-
-  def harvest_closest_harvestable(worker)
-    closest_harvestable_tree = trees.select do |tree|
-      # let's never try to harvest what chopper is cutting down
-      next false if plans[chopper&.id]&.chop? && plans[chopper.id].node == tree.node
-      next false if tree.node == seed_node
-
-      ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
-
-      turns_to_reach = ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
-
-      tree.fruits_at_arrival(_turns = turns_to_reach) >= worker.free_capacity
-    end.sort_by do |tree|
-      [shortest_path(worker.node, tree.node).size, tree.period]
-    end.first
-
-    if closest_harvestable_tree
-      return go_and_harvest(worker, closest_harvestable_tree.node)
+    # 0, if outside base squares (beelined previously), continue on to nearest grown tree
+    if !nodes_within_3_of_camp.include?(worker.node)
+      closest_grown_tree = trees.select(&:grown?).min_by { shortest_path(worker.node, _1.node).size }
+      if closest_grown_tree
+        messages << "beeline"
+        return go_and_chop(worker, closest_grown_tree.node)
+      end
     end
 
-    false
+    # 0, ENDGAME CLEAR
+    if turn > 287
+      nearby_bananas = nodes_within_3_of_camp
+        .select { cells[_1]&.tree && cells[_1].tree.grown? && cells[_1].tree.type?("BANANA") }
+
+      if nearby_bananas.any?
+        node = nearby_bananas.quick_min_by { shortest_path(worker.node, _1).size }
+        messages << "fullclear"
+        go_and_chop(worker, node)
+        return
+      end
+
+      nearby_non_bananas = nodes_within_3_of_camp
+        .select { cells[_1]&.tree && cells[_1].tree.grown? && !cells[_1].tree.type?("BANANA") }
+
+      if nearby_non_bananas.any?
+        node = nearby_non_bananas.quick_min_by { shortest_path(worker.node, _1).size }
+        messages << "fullclear"
+        go_and_chop(worker, node)
+        return
+      end
+    end
+
+    # 1. clear seed node if it does not have a banana on it
+    if cells[seed_node]&.tree && !cells[seed_node].tree.type?("BANANA")
+      return go_and_chop(worker, seed_node)
+    end
+
+    # 2. seed is open, chop bananas, then grown trees next to seed, finally anything
+    grown_banana_nodes = nodes_within_3_of_camp_except_seed
+      .select { cells[_1]&.tree && cells[_1].tree.grown? && cells[_1].tree.type?("BANANA") }
+      # TODO, see if worker can make it to my tree being felled by opp
+
+    if grown_banana_nodes.any?
+      closest = grown_banana_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_chop(worker, closest)
+    end
+
+    grown_next_to_seed = nodes_within_3_of_camp_except_seed
+      .select { cells[_1]&.tree && cells[_1].tree.grown? && grid.neighbors(seed_node).include?(_1) }
+
+    if grown_next_to_seed.any?
+      closest = grown_next_to_seed.min_by { shortest_path(worker.node, _1).size }
+      return go_and_chop(worker, closest)
+    end
+
+    grown = nodes_within_3_of_camp_except_seed
+      .select { cells[_1]&.tree && cells[_1].tree.grown? }
+
+    if grown.any?
+      closest = grown.min_by { shortest_path(worker.node, _1).size }
+      return go_and_chop(worker, closest)
+    end
+
+    debug("== Hmm, no choppable trees, guess lets go to soonest choppable")
+
+    growing = nodes_within_3_of_camp_except_seed
+      .select { cells[_1]&.tree && cells[_1].tree.turns_till_size(4) <= 2 }
+
+    if growing.any?
+      growest = growing.min_by { cells[_1].tree.turns_till_size(4) }
+
+      if worker.node == growest # already there!
+        debug("== Chopper waiting on a growing tree")
+        return
+      else # go if not there
+        return go(worker, growest)
+      end
+    end
+
+    debug("== Hmmmm, no choppable nor growing trees, helper slacking off?")
+
+    closest_grown_tree = trees
+      .select { _1.grown? && _1.node != seed_node }
+      .min_by { shortest_path(worker.node, _1.node).size }
+
+    if closest_grown_tree
+      messages << "beeline"
+      return go_and_chop(worker, closest_grown_tree.node)
+    end
+
+    debug("== D'oh, no grown trees, checking any trees")
+
+    closest_tree = trees.min_by { shortest_path(worker.node, _1.node).size }
+    if closest_tree
+      messages << "slim pickings"
+      return go_and_chop(worker, closest_tree.node)
+    end
+
+    debug("== no trees on map, entering endgame")
+    closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+    messages << "hugging base"
+    go_and_chop(worker, closest_dropoff)
   end
 
   def organize_helper(worker)
@@ -378,6 +447,7 @@ class Controller
         (inter && seek_to_plant_banana(worker)) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
         (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
+        (my_inventory.apple < best_worker_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
         (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) # TODO, may need to detect inter already grabbing last piece
 
       debug("== not clear how helper could help scale to chopper!") if plans[worker.id].nil?
@@ -429,6 +499,68 @@ class Controller
     end
 
     seek_to_plant_banana(worker)
+  end
+
+  def organize_intermediate(worker)
+    chop_wars(worker)
+    return if plans[worker.id]
+
+    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+      (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
+        (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
+        (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 1)) ||
+        (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 1)) ||
+        (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 2)) ||
+        (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 2)) ||
+        (my_inventory.lemon < 6 && gather_initial_fruit(worker, "LEMON", 1)) ||
+        (my_inventory.plum < 6 && gather_initial_fruit(worker, "PLUM", 1)) ||
+        (my_inventory.lemon < 6 && gather_initial_fruit(worker, "LEMON", 2)) ||
+        (my_inventory.plum < 6 && gather_initial_fruit(worker, "PLUM", 2)) ||
+        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
+        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
+        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 2)) ||
+        (my_inventory.plum < best_worker_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 2)) ||
+        (my_inventory.apple < best_worker_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
+        (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
+        debug("== Huh? inter has nothing to do for scaling to chopper!")
+        # (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
+        # (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
+    end
+    return if plans[worker.id]
+
+    if worker.full?
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_dropoff)
+    end
+
+    # regular harvesting
+    harvest_closest_harvestable(worker)
+    return if plans[worker.id]
+
+    raise("hmm, inter has nothing to do")
+  end
+
+  # Regular harvesting
+  def harvest_closest_harvestable(worker)
+    closest_harvestable_tree = trees.select do |tree|
+      # let's never try to harvest what chopper is cutting down
+      next false if plans[chopper&.id]&.chop? && plans[chopper.id].node == tree.node
+      next false if tree.node == seed_node
+
+      ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
+
+      turns_to_reach = ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
+
+      tree.fruits_at_arrival(_turns = turns_to_reach) >= worker.free_capacity
+    end.sort_by do |tree|
+      [shortest_path(worker.node, tree.node).size, tree.period]
+    end.first
+
+    if closest_harvestable_tree
+      return go_and_harvest(worker, closest_harvestable_tree.node)
+    end
+
+    false
   end
 
   def seek_to_plant_carried_banana(worker)
@@ -556,13 +688,11 @@ class Controller
     if worker.node == path.last && worker.carrying?(tree_type)
       return plans[worker.id] = Plan.new("PLANT", worker.id, tree_type)
     elsif worker.carrying?(tree_type)
-      worker_path = shortest_path(worker.node, path.last)
-      return plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
+      return go(worker, path.last)
     elsif worker.node == path[1] && !worker.carrying?(tree_type) && my_inventory.has?(tree_type)
       return plans[worker.id] = Plan.new("PICK", worker.id, tree_type)
     elsif my_inventory.has?(tree_type) # as in no lemon in hand, go to near camp
-      worker_path = shortest_path(worker.node, path[1])
-      return plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
+      return go(worker, path[1])
     end
 
     false
@@ -578,167 +708,14 @@ class Controller
     return go_and_mine(worker, closest_mine)
   end
 
-  def gather_initial_fruit(worker, fruit_type, max_wait)
-    if worker.full?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_dropoff)
-    end
-
-    if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
-      plans[worker.id] = Plan.new("HARVEST", worker.id)
-    else # gotta detect and go to a good candidate tree
-      path_to_tree, turns_till = nodes_within_3_of_camp
-        .select { cells[_1]&.tree && cells[_1].tree.type?(fruit_type) }
-        .map do |node|
-          path = shortest_path(worker.node, node)
-          [path, cells[node].tree.turns_till_fruit(worker, path)]
-        end.select { _2 <= max_wait }.min_by { |_path, turns_till| turns_till }
-
-      if path_to_tree.nil?
-        debug("== No #{fruit_type} trees qualify for early harvesting with a wait time of #{max_wait}")
-        return
-      end
-
-      messages << "trns till #{fruit_type} #{turns_till}"
-      plans[worker.id] = Plan.new("MOVE", worker.id, nil, path_to_tree[worker.move_speed] || path_to_tree.last)
-    end
-  end
-
-  def organize_chopping
-    # 0. unload if carrying wood for some reason
-    if chopper.carry_wood.positive?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(chopper.node, _1).size }
-
-      return go_and_drop(chopper, closest_dropoff)
-    end
-
-    # WAR, seek to fight over chopping if opp within 2 turns can be cought
-    opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
-    if opp_workers_chopping.any?
-      chops = opp_workers_chopping.map do |opp_worker|
-        tree = cells[opp_worker.node].tree
-        path = shortest_path(chopper.node, opp_worker.node)
-        turns_to_reach = ((path.size - 1) / chopper.move_speed.to_f).ceil
-        turns_to_fell = tree.chop_turns(opp_worker.chop_power)
-        [path, turns_to_reach, turns_to_fell]
-      end
-
-      interceptable_chops = chops.select { |p, to_reach, to_fell| to_reach <= 2 && (to_reach + 1) <= to_fell }
-      if interceptable_chops.any?
-        path, _, _ = interceptable_chops.quick_max_by { |p, to_reach, to_fell| cells[p.last].tree.size }
-
-        messages << "chop warz"
-        return go_and_chop(chopper, path.last)
-      end
-    end
-
-    # 0, if outside base squares (beelined previously), continue on to nearest grown tree
-    if !nodes_within_3_of_camp.include?(chopper.node)
-      closest_grown_tree = trees.select(&:grown?).min_by { shortest_path(chopper.node, _1.node).size }
-      if closest_grown_tree
-        messages << "beeline"
-        return go_and_chop(chopper, closest_grown_tree.node)
-      end
-    end
-
-    # 0, ENDGAME CLEAR
-    if turn > 287
-      nearby_bananas = nodes_within_3_of_camp
-        .select { cells[_1]&.tree && cells[_1].tree.grown? && cells[_1].tree.type?("BANANA") }
-
-      if nearby_bananas.any?
-        node = nearby_bananas.quick_min_by { shortest_path(chopper.node, _1).size }
-        messages << "fullclear"
-        go_and_chop(chopper, node)
-        return
-      end
-
-      nearby_non_bananas = nodes_within_3_of_camp
-        .select { cells[_1]&.tree && cells[_1].tree.grown? && !cells[_1].tree.type?("BANANA") }
-
-      if nearby_non_bananas.any?
-        node = nearby_non_bananas.quick_min_by { shortest_path(chopper.node, _1).size }
-        messages << "fullclear"
-        go_and_chop(chopper, node)
-        return
-      end
-    end
-
-    # 1. clear seed node if it does not have a banana on it
-    if cells[seed_node]&.tree && !cells[seed_node].tree.type?("BANANA")
-      return go_and_chop(chopper, seed_node)
-    end
-
-    # 2. seed is open, chop bananas, then grown trees next to seed, finally anything
-    grown_banana_nodes = nodes_within_3_of_camp_except_seed
-      .select { cells[_1]&.tree && cells[_1].tree.grown? && cells[_1].tree.type?("BANANA") }
-      # TODO, see if chopper can make it to my tree being felled by opp
-
-    if grown_banana_nodes.any?
-      closest = grown_banana_nodes.min_by { shortest_path(chopper.node, _1).size }
-      return go_and_chop(chopper, closest)
-    end
-
-    grown_next_to_seed = nodes_within_3_of_camp_except_seed
-      .select { cells[_1]&.tree && cells[_1].tree.grown? && grid.neighbors(seed_node).include?(_1) }
-
-    if grown_next_to_seed.any?
-      closest = grown_next_to_seed.min_by { shortest_path(chopper.node, _1).size }
-      return go_and_chop(chopper, closest)
-    end
-
-    grown = nodes_within_3_of_camp_except_seed
-      .select { cells[_1]&.tree && cells[_1].tree.grown? }
-
-    if grown.any?
-      closest = grown.min_by { shortest_path(chopper.node, _1).size }
-      return go_and_chop(chopper, closest)
-    end
-
-    debug("== Hmm, no choppable trees, guess lets go to soonest choppable")
-
-    growing = nodes_within_3_of_camp_except_seed
-      .select { cells[_1]&.tree && cells[_1].tree.turns_till_size(4) <= 2 }
-
-    if growing.any?
-      growest = growing.min_by { cells[_1].tree.turns_till_size(4) }
-
-      if chopper.node == growest # already there!
-        debug("== Chopper waiting on a growing tree")
-        return
-      else # go if not there
-        return go(chopper, growest)
-      end
-    end
-
-    debug("== Hmmmm, no choppable nor growing trees, helper slacking off?")
-
-    closest_grown_tree = trees
-      .select { _1.grown? && _1.node != seed_node }
-      .min_by { shortest_path(chopper.node, _1.node).size }
-
-    if closest_grown_tree
-      messages << "beeline"
-      return go_and_chop(chopper, closest_grown_tree.node)
-    end
-
-    debug("== D'oh, no grown trees, checking any trees")
-
-    closest_tree = trees.min_by { shortest_path(chopper.node, _1.node).size }
-    if closest_tree
-      messages << "slim pickings"
-      return go_and_chop(chopper, closest_tree.node)
-    end
-
-    debug("== no trees on map, entering endgame")
-    closest_dropoff = dropoff_nodes.min_by { shortest_path(chopper.node, _1).size }
-    messages << "hugging base"
-    go_and_chop(chopper, closest_dropoff)
-  end
-
   # a generic going. Checks about having reached should occur beforehand in callers.
   def go(worker, node)
-    excludable = plans[chopper&.id]&.node
+    excludable =
+      if worker.id == chopper&.id
+        nil
+      else
+        plans[chopper&.id]&.node
+      end
 
     path =
       shortest_path(worker.node, node, excluding: excludable ? [excludable] : nil) ||
@@ -823,9 +800,96 @@ class Controller
     false
   end
 
+  # Used by both helper and inter, helper gets prio
+  #
+  def gather_initial_fruit(worker, fruit_type, max_wait)
+    if worker.full?
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_dropoff)
+    end
+
+    if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
+      plans[worker.id] = Plan.new("HARVEST", worker.id)
+    else # gotta detect and go to a good candidate tree
+      path_to_tree, turns_till = nodes_within_3_of_camp
+        .select do |node|
+          next false unless (tree = cells[node]&.tree)
+          next false unless tree.type?(fruit_type)
+
+          plan = plans[helper.id]
+          next true unless plan
+
+          !(plan.name?("HARVEST") && helper.node == node)
+        end
+        .map do |node|
+          path = shortest_path(worker.node, node)
+          [path, cells[node].tree.turns_till_fruit(worker, path)]
+        end.select { _2 <= max_wait }.min_by { |_path, turns_till| turns_till }
+
+
+      if path_to_tree.nil?
+        debug("== No #{fruit_type} trees qualify for early harvesting with a wait time of #{max_wait}")
+        return
+      end
+
+      messages << "trns till #{fruit_type} #{turns_till}"
+      go(worker, path_to_tree.last)
+    end
+  end
+
+  # Reserved for dire straits like last apples for chopper
+  def gather_anywhere_fruit(worker, fruit_type, max_wait)
+    if worker.full?
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_dropoff)
+    end
+
+    if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
+      return plans[worker.id] = Plan.new("HARVEST", worker.id)
+    end
+
+    tree_path, turns_till = trees
+      .select { _1.type?(fruit_type) && !(plans[helper.id]&.name?("HARVEST") && helper.node == _1.node) }
+      .map do |tree|
+        path = shortest_path(worker.node, tree.node)
+        [path, tree.turns_till_fruit(worker, path)]
+      end
+      .select { _2 <= max_wait }.min_by { |_path, turns_till| turns_till }
+
+    if tree_path.nil?
+      debug("== No #{fruit_type} trees qualify any-dist harvesting with wait of #{max_wait}")
+      return
+    end
+
+    messages << "trns till #{fruit_type} #{turns_till}"
+    go(worker, tree_path.last)
+  end
+
+  def chop_wars(worker)
+    # WAR, seek to fight over chopping if opp within 2 turns can be cought
+    opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
+    return if opp_workers_chopping.none?
+
+    chops = opp_workers_chopping.map do |opp_worker|
+      tree = cells[opp_worker.node].tree
+      path = shortest_path(worker.node, opp_worker.node)
+      turns_to_reach = ((path.size - 1) / worker.move_speed.to_f).ceil
+      turns_to_fell = tree.chop_turns(opp_worker.chop_power)
+      [path, turns_to_reach, turns_to_fell]
+    end
+
+    interceptable_chops = chops.select { |p, to_reach, to_fell| to_reach <= 2 && (to_reach + 1) <= to_fell }
+    if interceptable_chops.any?
+      path, _, _ = interceptable_chops.quick_max_by { |p, to_reach, to_fell| cells[p.last].tree.size }
+
+      messages << "chop warz"
+      return go_and_chop(worker, path.last)
+    end
+  end
+
   # Major predictive logic
   def turns_to_gather(type, count)
-    binding.pry
+    # TODO
   end
 
   # @return Hash {"PLUM" => 3, "LEMON" => 3, "APPLE" => 3}
@@ -957,6 +1021,10 @@ class Controller
 
     ms(">> wet node init") { wet_nodes_within_3_of_camp }
     ms(">> seed note init") { seed_node }
+
+    #===
+    return if defined?(LOCAL)
+    #===
 
     ms(">> grass -> seed node init") do
       grass_nodes.each do |grass_node|
