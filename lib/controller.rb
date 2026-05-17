@@ -271,6 +271,8 @@ class Controller
         (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
         (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 30))
+
+      raise("not clear how helper could help scale to chopper!") if plans[worker.id].nil?
     end
     return if plans[worker.id]
 
@@ -325,7 +327,11 @@ class Controller
       # 2. seek to plant next to seed node
       closest = nodes_within_3_of_camp_except_seed
         .select { cells[_1]&.tree.nil? }
-        .min_by { shortest_path(worker.node, _1).size + shortest_path(my_camp.node, _1).size }
+        .min_by do |node|
+          shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size -
+            # wetness is treated as being 2 squares closer, giving a massive edge
+            (wet_nodes.include?(node) ? 2 : 0)
+        end
 
       if closest
         return go_and_plant(worker, closest, "BANANA")
