@@ -317,6 +317,13 @@ class Controller
     end
 
     # regular harvesting
+    harvest_closest_harvestable(worker)
+    return if plans[worker.id]
+
+    raise("hmm, inter has nothing to do")
+  end
+
+  def harvest_closest_harvestable(worker)
     closest_harvestable_tree = trees.select do |tree|
       # let's never try to harvest what chopper is cutting down
       next false if plans[chopper&.id]&.chop? && plans[chopper.id].node == tree.node
@@ -335,7 +342,7 @@ class Controller
       return go_and_harvest(worker, closest_harvestable_tree.node)
     end
 
-    raise("hmm, inter has nothing to do")
+    false
   end
 
   def organize_helper(worker)
@@ -357,7 +364,9 @@ class Controller
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
         (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10))
 
-      raise("not clear how helper could help scale to chopper!") if plans[worker.id].nil?
+      debug("== not clear how helper could help scale to chopper!") if plans[worker.id].nil?
+
+      harvest_closest_harvestable(worker) unless plans[worker.id]
     end
     return if plans[worker.id]
 
