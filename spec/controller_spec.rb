@@ -1123,7 +1123,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for inter to go grab plums" do
-          is_expected.to eq("MSG getting seed PLUM; MOVE 2 10 1; HARVEST 1")
+          is_expected.to eq("MSG getting seed PLUM, oh LEMON; MOVE 2 10 1; HARVEST 1")
         end
       end
 
@@ -1283,6 +1283,62 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command for both carry1 workers to go get iron" do
           is_expected.to eq("MSG IROON!, IROON!; MOVE 3 16 7; MOVE 1 12 4")
+        end
+      end
+    end
+
+    context "with seed=1236240287580781800" do
+      let(:field) do
+        <<~FIELD
+          ..~~~+.........#..~...
+          ..~~~~~.......#...~...
+          ......~.~~~......#~#..
+          .+..#.~~~~~~.0........
+          .....~~~~.~~..........
+          .......~......~.......
+          ..........~~.~~~~.....
+          ........1.~~~~~~.#..+.
+          ..#~#......~~~.~......
+          ...~...#.......~~~~~..
+          ...~..#.........+~~~..
+        FIELD
+      end
+
+      context "when helper is already on a fruit-having tree of a type we need" do
+        let(:turn) { 15 }
+
+        let(:input) do
+          <<~INPUT
+            3 0 1 4 4 0
+            9 3 3 6 6 0
+            18
+            PLUM 1 9 4 12 0 6
+            PLUM 20 1 4 12 0 6
+            LEMON 16 5 4 12 3 0
+            LEMON 5 5 4 12 3 0
+            APPLE 1 7 4 20 3 0
+            APPLE 20 3 4 20 3 0
+            APPLE 4 9 4 20 3 0
+            APPLE 17 1 4 20 3 0
+            APPLE 7 0 4 20 0 3
+            APPLE 14 10 4 20 0 3
+            BANANA 10 9 4 6 3 0
+            BANANA 11 1 4 6 3 0
+            BANANA 4 6 4 6 3 2
+            BANANA 17 4 4 6 3 2
+            PLUM 12 3 4 12 1 3
+            BANANA 12 4 3 5 0 3
+            LEMON 14 4 3 10 0 2
+            BANANA 13 4 1 3 0 2
+            3
+            0 1 5 5 1 1 1 1 0 0 0 0 0 0
+            1 0 12 3 1 1 1 1 0 0 0 0 0 0
+            2 0 18 4 2 1 1 1 0 0 0 0 1 0
+          INPUT
+        end
+
+        it "returns a simple command to harvest it" do
+          is_expected.to eq("MSG oh PLUM; MOVE 2 17 3; HARVEST 1")
         end
       end
     end

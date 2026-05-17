@@ -283,7 +283,7 @@ class Controller
     elapsed_ms = (t1 - t0) * 1000.0
 
     # debug("=> Turn #{turn} took #{elapsed_ms.round}ms to calculate")
-    raise("Turn #{turn} took #{elapsed_ms.round}ms to calculate, too slow!") if elapsed_ms > 100
+    raise("Turn #{turn} took #{elapsed_ms.round}ms to calculate, too slow!") if elapsed_ms > 60
 
     result == "" ? "WAIT" : result
   end
@@ -319,8 +319,8 @@ class Controller
     return if plans[worker.id]
 
     if worker.full?
-      closest_camp_n4 = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_camp_n4)
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_dropoff)
     end
 
     # regular harvesting
@@ -362,6 +362,10 @@ class Controller
       debug("== Helper will help scale to chopper")
 
       seek_to_plant_carried_banana(worker) ||
+        harvest_already_stood_on_tree(
+          worker,
+          *[(my_inventory.lemon < best_worker_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < best_worker_cost["PLUM"] ? "PLUM" : nil)].compact
+        ) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
         (my_inventory.plum < best_worker_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
@@ -385,8 +389,8 @@ class Controller
     # == Regular helping starts ==
 
     if worker.full? && worker.carry_banana.zero?
-      closest_camp_n4 = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_camp_n4)
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_dropoff)
     end
 
     # Get off square chopper wants to get to
@@ -479,6 +483,18 @@ class Controller
     end
   end
 
+  def harvest_already_stood_on_tree(worker, *types)
+    return if worker.full?
+
+    tree = cells[worker.node]&.tree
+    return unless tree
+    return unless types.include?(tree.type)
+    return unless tree.fruit?
+
+    messages << "oh #{tree.type}"
+    go_and_harvest(worker, tree.node)
+  end
+
   def ensure_sufficient_lemon_growth(worker)
     expected_lemon_production_near_camp_per_turn = nodes_within_3_of_camp.sum do |near_node|
       cell = cells[near_node]
@@ -563,14 +579,12 @@ class Controller
   end
 
   def gather_initial_fruit(worker, fruit_type, max_wait)
-    if worker.full? && dropoff_nodes.include?(worker.node)
-      plans[worker.id] = Plan.new("DROP", worker.id)
-    elsif worker.full? # go to dropoff
-      home_paths = dropoff_nodes.map { [_1, shortest_path(worker.node, _1)]}
-      next_to_home_node, path = home_paths.sort_by { |_node, path| path.size }.first
+    if worker.full?
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+      return go_and_drop(worker, closest_dropoff)
+    end
 
-      plans[worker.id] = Plan.new("MOVE", worker.id, nil, next_to_home_node)
-    elsif cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
+    if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
       plans[worker.id] = Plan.new("HARVEST", worker.id)
     else # gotta detect and go to a good candidate tree
       path_to_tree, turns_till = nodes_within_3_of_camp
@@ -593,9 +607,9 @@ class Controller
   def organize_chopping
     # 0. unload if carrying wood for some reason
     if chopper.carry_wood.positive?
-      closest_camp_n4 = dropoff_nodes.min_by { shortest_path(chopper.node, _1).size }
+      closest_dropoff = dropoff_nodes.min_by { shortest_path(chopper.node, _1).size }
 
-      return go_and_drop(chopper, closest_camp_n4)
+      return go_and_drop(chopper, closest_dropoff)
     end
 
     # WAR, seek to fight over chopping if opp within 2 turns can be cought
@@ -785,7 +799,10 @@ class Controller
   def gather_and_plant(worker, fruit_type)
     if worker.carrying?(fruit_type)
       node = nodes_within_3_of_camp_except_seed.select { cells[_1]&.tree.nil? }
-        .min_by { shortest_path(worker.node, _1).size - (wet_nodes.include?(_1) ? 0.5 : 0) }
+        .min_by do |node|
+          shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size -
+            (wet_nodes.include?(node) ? 0.5 : 0)
+        end
 
       raise("oof, no free cells near base") if node.nil?
 
