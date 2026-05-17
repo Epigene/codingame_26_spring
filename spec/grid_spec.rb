@@ -73,6 +73,36 @@ RSpec.describe Grid, instance_name: :grid do
     end
   end
 
+  describe "#shortest_path(start, goal, excluding: nil)" do
+    subject(:shortest_path) { grid.shortest_path(start, goal, excluding: excluding) }
+
+    let(:grid) { described_class.new(3, 2, fill: true) }
+    let(:excluding) { nil }
+
+    context "when asking for a simple end-to-end path" do
+      let(:start) { "0 0" }
+      let(:goal) { "2 1" }
+
+      it { is_expected.to eq(["0 0", "1 0", "2 0", "2 1"]) }
+    end
+
+    context "when asking for a simple end-to-end path but excluding some taken nodes" do
+      let(:start) { "0 0" }
+      let(:goal) { "2 1" }
+      let(:excluding) { ["1 0", "2 0"] }
+
+      it { is_expected.to eq(["0 0", "0 1", "1 1", "2 1"]) }
+    end
+
+    context "when asking for a simple end-to-end path but exclusions cut the graph in two and there are no paths" do
+      let(:start) { "0 0" }
+      let(:goal) { "2 1" }
+      let(:excluding) { ["1 0", "1 1"] }
+
+      it { is_expected.to be_nil }
+    end
+  end
+
   describe "#n8(point)" do
     subject(:n8) { grid.n8(point) }
 

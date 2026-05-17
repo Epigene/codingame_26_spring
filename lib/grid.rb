@@ -162,24 +162,27 @@ class Grid
       mem[node] = nil
     end
 
-    forward_visited = {start => nil}.merge(exclusions) # Maps node to its parent
-    backward_visited = {goal => nil}.merge(exclusions)
+    forward_visited = exclusions.dup
+    forward_visited[start] = nil
+    backward_visited = exclusions.dup
+    backward_visited[goal] = nil
 
     loop do
       # Expand the forward search
-      if forward_queue.any?
+      unless forward_queue.empty?
         intersect = expand_layer(forward_queue, forward_visited, backward_visited, structure)
         return build_path(intersect, forward_visited, backward_visited) if intersect
       end
 
       # Expand the backward search
-      if backward_queue.any?
+      unless backward_queue.empty?
         intersect = expand_layer(backward_queue, backward_visited, forward_visited, structure)
         return build_path(intersect, forward_visited, backward_visited) if intersect
       end
 
       # If neither queue can proceed, no path exists
-      return if forward_queue.empty? && backward_queue.empty?
+      # return if forward_queue.empty? && backward_queue.empty?
+      return if forward_queue.empty? || backward_queue.empty?
     end
 
     nil # No path found

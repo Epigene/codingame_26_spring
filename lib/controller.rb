@@ -704,7 +704,9 @@ class Controller
 
   # a generic going. Checks about having reached should occur beforehand in callers.
   def go(worker, node)
-    path = shortest_path(worker.node, node)
+    excludable = plans[chopper&.id]&.node
+    path = shortest_path(worker.node, node, excluding: excludable ? [excludable] : nil)
+
     plans[worker.id] = Plan.new("MOVE", worker.id, nil, path[worker.move_speed] || path.last)
   end
 
@@ -953,23 +955,23 @@ class Controller
     nil
   end
 
-  def shortest_path(from, to)
+  def shortest_path(from, to, excluding: nil)
     raise(":from is nil, debug!") if from.nil?
     raise(":to is nil, debug!") if to.nil?
 
-    key = [from, to]
-    path = shortest_paths[key] || grid.shortest_path(*key)
+    key = [from, to, excluding]
+    path = shortest_paths[key] || grid.shortest_path(from, to, excluding: excluding)
 
-    shortest_paths[key.reverse] ||= path.reverse
-    shortest_paths[key] ||= path
+    r_key = [to, from, excluding]
+    shortest_paths[r_key] ||= path.reverse
 
     # also producing n-1 longth subpaths for ease of further navigation
-    if (subpaths_exist = path.first(3).size == 3)
-      key = [path[0], path[-2]]
+    if excluding.nil? && (subpaths_exist = path.first(3).size == 3)
+      key = [path[0], path[-2], nil]
       shortest_paths[key] ||= path[0..-2]
       shortest_paths[key.reverse] ||= path[0..-2].reverse
 
-      key = [path[1], path[-1]]
+      key = [path[1], path[-1], nil]
       shortest_paths[key] ||= path[1..-1]
       shortest_paths[key.reverse] ||= path[1..-1].reverse
     end

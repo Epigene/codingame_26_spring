@@ -1181,6 +1181,54 @@ RSpec.describe Controller, instance_name: :controller do
           is_expected.to eq("CHOP 5; MOVE 2 10 1; MOVE 1 16 0")
         end
       end
+
+      context "when helper has two ways to get to diagonal seed at 16 1 and one is blocked by chopper" do
+        let(:input) do
+          <<~INPUT
+            6 4 2 7 0 12
+            7 25 6 9 4 0
+            27
+            PLUM 14 8 4 12 3 0
+            PLUM 7 2 4 12 3 0
+            LEMON 9 4 4 12 3 0
+            LEMON 12 6 4 12 3 0
+            LEMON 19 1 4 12 3 0
+            LEMON 2 9 4 12 3 0
+            APPLE 13 8 4 20 3 0
+            APPLE 8 2 4 20 3 0
+            APPLE 17 8 4 20 3 0
+            APPLE 4 2 4 20 3 0
+            APPLE 16 0 4 17 3 0
+            APPLE 5 10 4 20 3 6
+            BANANA 12 7 4 6 3 0
+            BANANA 9 3 4 6 3 0
+            BANANA 19 6 4 6 3 0
+            BANANA 2 4 4 6 3 0
+            LEMON 15 1 4 12 1 2
+            PLUM 8 9 4 12 3 6
+            BANANA 16 1 4 6 3 1
+            PLUM 7 10 4 12 3 0
+            PLUM 12 2 4 12 3 1
+            LEMON 6 9 4 12 1 3
+            LEMON 8 8 4 12 3 1
+            APPLE 8 10 4 20 3 0
+            BANANA 13 0 3 5 0 2
+            BANANA 17 1 2 4 0 3
+            BANANA 15 0 1 3 0 6
+            6
+            0 1 8 9 1 1 1 1 0 0 0 0 0 0
+            1 0 15 0 1 1 1 1 0 0 0 0 0 0
+            2 0 13 0 3 2 2 1 0 0 0 0 0 0
+            3 1 6 9 2 2 1 1 0 1 0 0 0 0
+            4 1 8 10 2 2 1 2 0 0 0 0 2 0
+            5 0 16 0 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a a command for helper to take the other available path" do
+          is_expected.to eq("CHOP 5; MOVE 2 12 2; MOVE 1 15 1")
+        end
+      end
     end
 
     # EXAMPLE
