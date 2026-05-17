@@ -1473,6 +1473,64 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          ..~~.......~~....#..
+          ..~~.......~~##...#.
+          #.........~~#.......
+          +#........~~......#.
+          ...1...#..........#.
+          .#..........#...0...
+          .#......~~........#+
+          .......#~~.........#
+          .#...##~~.......~~..
+          ..#....~~.......~~..
+        FIELD
+      end
+
+      context "when just trained the chopper" do
+        let(:input) do
+          <<~INPUT
+            0 1 0 9 0 0
+            8 12 1 27 4 0
+            21
+            PLUM 15 9 4 12 3 0
+            PLUM 4 0 4 12 3 0
+            PLUM 19 2 4 12 3 0
+            PLUM 0 7 4 12 3 0
+            PLUM 6 1 4 12 3 0
+            PLUM 13 8 4 12 3 0
+            LEMON 16 6 4 12 3 0
+            LEMON 3 3 4 12 1 5
+            LEMON 3 9 4 12 3 0
+            LEMON 16 0 4 12 3 0
+            APPLE 17 3 4 20 3 0
+            APPLE 2 6 4 20 3 0
+            BANANA 8 3 4 6 3 0
+            BANANA 11 6 4 6 3 0
+            BANANA 13 5 4 6 3 0
+            BANANA 6 4 4 6 3 0
+            BANANA 12 6 4 6 3 0
+            BANANA 7 3 4 6 3 0
+            LEMON 16 7 4 12 3 0
+            BANANA 4 4 4 6 0 1
+            PLUM 14 5 4 12 2 7
+            5
+            0 1 4 3 1 1 1 1 0 0 0 0 0 0
+            1 0 17 5 1 1 1 1 0 0 0 1 0 0
+            2 1 3 3 1 1 1 0 1 0 0 0 0 0
+            3 0 19 4 1 1 1 1 0 0 0 0 0 0
+            4 0 16 5 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "times out, seek to optim" do
+          is_expected.to eq("MSG beeline; MOVE 4 16 6; PLANT 1 BANANA; MOVE 3 19 3")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

@@ -9,13 +9,12 @@ end
 
 def ms(label, &block)
   t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  result = block.call
+  block.call
+ensure
   t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
   elapsed_ms = (t1 - t0) * 1000.0
-  debug "#{label} #{elapsed_ms.round}ms"
 
-  result
+  debug "#{label} #{elapsed_ms.round}ms"
 end
 
 def xms(label, &block)
