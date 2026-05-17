@@ -259,12 +259,6 @@ class Controller
     # return "PICK 0 LEMON" if turn == 3
 
     if turn <= 1
-      # 5, 17, 0, 10
-      turns_till_chopper =
-        -[my_inventory.plum - 5, 0].min * 5 +
-        -[my_inventory.lemon - 17, 0].min * 5 +
-        -[my_inventory.iron - 10, 0].min * shortest_path_to_mining.size * 2
-
       # in how many turns is it OK to scale straight to chopper. Can probably go lower than 70, maybe 50.
       if turns_till_chopper > 70
         potential_worker = my_inventory.best_intermediate_worker(my_workers.size)
@@ -465,7 +459,7 @@ class Controller
           my_inventory.lemon >= best_worker_cost["LEMON"] && my_inventory.plum >= best_worker_cost["PLUM"] &&
             gather_iron(worker)
         ) ||
-        (inter && seek_to_plant_banana(worker)) ||
+        (inter && (turns_till_chopper < 15) && seek_to_plant_banana(worker)) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
         (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
         (my_inventory.apple < best_worker_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
@@ -649,7 +643,9 @@ class Controller
       cells[seed_node]&.tree&.type?("BANANA") &&
       cells[seed_node]&.tree&.turns_till_fruit(worker, shortest_path(worker.node, seed_node)) < 5
 
-    if seeding_bananas
+    if (tree = cells[worker.node]&.tree) && tree.type?("BANANA") && tree.fruit? # ON banana
+      go_and_harvest(worker, tree.node)
+    elsif seeding_bananas
       return go_and_harvest(worker, seed_node)
     elsif my_inventory.banana.positive?
       closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
@@ -966,6 +962,13 @@ class Controller
       "PLUM" => existing_workers + 4, "LEMON" => existing_workers + 16, "APPLE" => existing_workers,
       "IRON" => existing_workers + 9
     }
+  end
+
+  def turns_till_chopper
+    -[my_inventory.plum - 5, 0].min * 5 +
+      -[my_inventory.lemon - 17, 0].min * 5 +
+      -[my_inventory.apple - 1, 0].min * 5 +
+      -[my_inventory.iron - 10, 0].min * shortest_path_to_mining.size * 2
   end
 
   def my_workers
