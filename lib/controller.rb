@@ -4,6 +4,10 @@ Camp = Struct.new(:my, :x, :y) do
   end
 end
 Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
+  def has?(type)
+    send(type.to_s.downcase).positive?
+  end
+
   def can_afford?(cost_hash)
     cost_hash.all? { |type, count| send(type.downcase) >= count }
   end
@@ -24,7 +28,7 @@ Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
 
   # @type LEMON etc. Caller neets to know that PLUM == movespeed etc.
   def best_affordable_train_tier(type, allowed_max, existing_worker_count)
-    store = send(type.downcase)
+    store = send(type.to_s.downcase)
     if store >= (existing_worker_count+(3**2))
       [allowed_max, 3].min
     elsif store >= (existing_worker_count+(2**2))
@@ -131,6 +135,10 @@ Worker = Struct.new(:id, :player, :x, :y,
 
   def full?
     [carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood].sum >= carry_capacity
+  end
+
+  def carrying?(fruit_type, at_least_count = 1)
+    send("carry_#{fruit_type.to_s.downcase}") >= at_least_count
   end
 
   def can_chop?
@@ -253,9 +261,18 @@ class Controller
   private
 
   def organize_intermediate(worker)
-    (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
-      (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "PLUM", 1)) ||
-      (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker))
+    (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
+      (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
+      (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 1)) ||
+      (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 1)) ||
+      (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 2)) ||
+      (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 2)) ||
+      (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
+      (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
+      (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
+      debug("== Huh? inter has nothing to do!")
+      # (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
+      # (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
   end
 
   def organize_helper(worker)
@@ -436,16 +453,14 @@ class Controller
 
   # @path Array<Node> # starts at camp and ends at desired tree node
   def handle_planting_at_end_of(worker, path, tree_type)
-    getter = "carry_#{tree_type.downcase}"
-
-    if worker.node == path.last && worker.send(getter).positive?
+    if worker.node == path.last && worker.carrying?(tree_type)
       return plans[worker.id] = Plan.new("PLANT", worker.id, tree_type)
-    elsif worker.send(getter).positive?
+    elsif worker.carrying?(tree_type)
       worker_path = shortest_path(worker.node, path.last)
       return plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
-    elsif worker.node == path[1] && worker.send(getter).zero? && my_inventory.send(tree_type.downcase).positive?
+    elsif worker.node == path[1] && !worker.carrying?(tree_type) && my_inventory.has?(tree_type)
       return plans[worker.id] = Plan.new("PICK", worker.id, tree_type)
-    elsif my_inventory.send(tree_type.downcase).positive? # as in no lemon in hand, go to near camp
+    elsif my_inventory.has?(tree_type) # as in no lemon in hand, go to near camp
       worker_path = shortest_path(worker.node, path[1])
       return plans[worker.id] = Plan.new("MOVE", worker.id, nil, worker_path[worker.move_speed] || worker_path.last)
     end
@@ -679,6 +694,25 @@ class Controller
     end
   end
 
+  def gather_and_plant(worker, fruit_type)
+    if worker.carrying?(fruit_type)
+      node = nodes_within_3_of_camp_except_seed.select { cells[_1]&.tree.nil? }
+        .min_by { shortest_path(worker.node, _1).size - (wet_nodes.include?(_1) ? 0.5 : 0) }
+
+      raise("oof, no free cells near base") if node.nil?
+
+      return go_and_plant(worker, node, fruit_type)
+    else
+      closest_fruit = trees.select { _1.type?(fruit_type) }
+        .min_by { _1.turns_till_fruit(worker, shortest_path(worker.node, _1.node)) }
+
+      messages << "getting seed #{fruit_type}"
+      return go_and_harvest(worker, closest_fruit.node)
+    end
+
+    false
+  end
+
   # @return Numeric
   def fruit_tree_score(worker, tree, path)
     distance = path.size
@@ -724,6 +758,12 @@ class Controller
     @my_workers ||= {}
     return @my_workers[turn] if @my_workers.key?(turn)
     @my_workers[turn] = workers.select(&:my?)
+  end
+
+  def trees_within_3_of_camp
+    @trees_within_3_of_camp ||= {}
+    return @trees_within_3_of_camp[turn] if @trees_within_3_of_camp.key?(turn)
+    @trees_within_3_of_camp[turn] = trees.select { nodes_within_3_of_camp.include?(_1.node) }
   end
 
   def tree_period_mapping
@@ -851,6 +891,9 @@ class Controller
   end
 
   def shortest_path(from, to)
+    raise(":from is nil, debug!") if from.nil?
+    raise(":to is nil, debug!") if to.nil?
+
     key = [from, to]
     path = shortest_paths[key] || grid.shortest_path(*key)
 
