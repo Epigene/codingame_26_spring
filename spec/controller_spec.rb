@@ -1231,6 +1231,62 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=4528739156648955000" do
+
+      let(:field) do
+        <<~FIELD
+          ...........~~~~~....
+          ..#..........~~~~~~.
+          +.....~~~....~~~~~~.
+          ......~~.....~~~.~..
+          ......~.1..#.~~....+
+          +....~~.#..0.~......
+          ..~.~~~.....~~......
+          .~~~~~~....~~~.....+
+          .~~~~~~..........#..
+          ....~~~~~...........
+        FIELD
+      end
+
+      context "when only iron remains ungathered" do
+        let(:turn) { 66 }
+        let(:input) do
+          <<~INPUT
+            6 18 6 7 6 0
+            3 3 6 33 6 0
+            18
+            PLUM 4 1 4 12 3 0
+            PLUM 15 8 4 12 3 0
+            PLUM 1 9 4 12 3 0
+            PLUM 18 0 4 12 3 0
+            LEMON 9 8 4 12 3 0
+            LEMON 10 1 4 12 3 0
+            LEMON 0 0 4 12 3 0
+            LEMON 19 9 4 12 3 0
+            APPLE 2 4 4 20 3 0
+            APPLE 17 5 4 20 3 0
+            BANANA 9 5 4 6 3 0
+            BANANA 10 4 4 6 3 0
+            LEMON 12 5 4 12 0 1
+            BANANA 12 4 4 6 3 0
+            BANANA 8 3 4 6 0 2
+            BANANA 12 3 4 6 3 0
+            BANANA 7 4 4 6 1 3
+            PLUM 10 7 4 12 3 0
+            4
+            0 1 8 3 1 1 1 1 0 0 0 0 0 0
+            1 0 12 5 1 1 1 1 0 0 0 0 0 0
+            2 1 7 4 1 1 1 0 0 0 0 0 0 0
+            3 0 14 7 2 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for both carry1 workers to go get iron" do
+          is_expected.to eq("MSG IROON!, IROON!; MOVE 3 16 7; MOVE 1 12 4")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

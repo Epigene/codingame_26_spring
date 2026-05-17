@@ -235,6 +235,7 @@ class Controller
   # @param input String # the raw as-is multiline input provided by game
   # @return String
   def call(turn:, input:)
+    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     @turn = turn
     debug(@input = input)
     init_turn_variables!
@@ -277,6 +278,12 @@ class Controller
       training,
       *plans.values.sort_by { -_1.weight }.map(&:command)
     ].compact.join("; ")
+
+    t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    elapsed_ms = (t1 - t0) * 1000.0
+
+    # debug("=> Turn #{turn} took #{elapsed_ms.round}ms to calculate")
+    raise("Turn #{turn} took #{elapsed_ms.round}ms to calculate, too slow!") if elapsed_ms > 100
 
     result == "" ? "WAIT" : result
   end
@@ -360,9 +367,14 @@ class Controller
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
         (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
         (my_inventory.iron < best_worker_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
+        (
+          my_inventory.lemon >= best_worker_cost["LEMON"] && my_inventory.plum >= best_worker_cost["PLUM"] &&
+            gather_iron(worker)
+        ) ||
         (inter && seek_to_plant_banana(worker)) ||
         (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
-        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10))
+        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
+        (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) # TODO, may need to detect inter already grabbing last piece
 
       debug("== not clear how helper could help scale to chopper!") if plans[worker.id].nil?
 
@@ -794,23 +806,9 @@ class Controller
     false
   end
 
-  # @return Numeric
-  def fruit_tree_score(worker, tree, path)
-    distance = path.size
-
-    score = 0
-    score -= distance * 100
-    score += case tree.type
-      when "BANANA"
-        90
-      when "PLUM", "LEMON"
-        60
-      else
-        0
-      end
-    score += tree.fruits
-
-    score
+  # Major predictive logic
+  def turns_to_gather(type, count)
+    binding.pry
   end
 
   # @return Hash {"PLUM" => 3, "LEMON" => 3, "APPLE" => 3}
@@ -845,13 +843,6 @@ class Controller
     @trees_within_3_of_camp ||= {}
     return @trees_within_3_of_camp[turn] if @trees_within_3_of_camp.key?(turn)
     @trees_within_3_of_camp[turn] = trees.select { nodes_within_3_of_camp.include?(_1.node) }
-  end
-
-  def tree_period_mapping
-    @tree_period_mapping ||= {
-      dry: {"PLUM" => 8, "LEMON" => 8, "APPLE" => 9, "BANANA" => 6},
-      wet: {"PLUM" => 3, "LEMON" => 3, "APPLE" => 2, "BANANA" => 4}
-    }
   end
 
   def init_turn_variables!
@@ -947,23 +938,31 @@ class Controller
     end
     #==
 
-    ms("> tail-end of init") do
-      ms(">> wet node init") { wet_nodes_within_3_of_camp }
-      ms(">> seed note init") { seed_node }
+    ms(">> wet node init") { wet_nodes_within_3_of_camp }
+    ms(">> seed note init") { seed_node }
 
-      ms(">> grass -> seed node init") do
-        grass_nodes.each do |grass_node|
-          shortest_path(grass_node, seed_node)
+    ms(">> grass -> seed node init") do
+      grass_nodes.each do |grass_node|
+        shortest_path(grass_node, seed_node)
+      end
+    end
+
+    ms(">> w3 of camp except seed") { nodes_within_3_of_camp_except_seed }
+
+    ms(">> dropoffs -> mining init") do
+      mining_nodes.each do |mining_node|
+        grid.neighbors(my_camp.node).each do |grass_node|
+          shortest_path(grass_node, mining_node)
         end
       end
+    end
 
-      ms(">> w3 of camp except seed") { nodes_within_3_of_camp_except_seed }
+    ms(">> all near-camp node connections") do
+      nodes_within_3_of_camp.each do |node|
+        nodes_within_3_of_camp.each do |other_node|
+          next if node == other_node
 
-      ms(">> dropoffs -> mining init") do
-        mining_nodes.each do |mining_node|
-          grid.neighbors(my_camp.node).each do |grass_node|
-            shortest_path(grass_node, mining_node)
-          end
+          shortest_path(node, other_node)
         end
       end
     end
@@ -1075,5 +1074,12 @@ class Controller
 
   def iron_nodes
     @iron_nodes ||= Set.new
+  end
+
+  def tree_period_mapping
+    @tree_period_mapping ||= {
+      dry: {"PLUM" => 8, "LEMON" => 8, "APPLE" => 9, "BANANA" => 6},
+      wet: {"PLUM" => 3, "LEMON" => 3, "APPLE" => 2, "BANANA" => 4}
+    }
   end
 end
