@@ -241,11 +241,51 @@ Plan = Struct.new(:name, :worker_id, :type, :node, :weight) do
   end
 end
 
+Prediction = Struct.new(:move, :carry, :harvest, :chop, :costs, :turns, :remaining_turns) do
+  def name
+    "#{move} #{carry} #{harvest} #{chop}"
+  end
+
+  # key value, tells plan's worth.
+  def grand_total
+    chop_points - cost
+  end
+
+  def cost
+    costs.except("IRON").values.sum
+  end
+
+  def wood_points_per_cycle
+    4 * carry
+  end
+
+  def cycle_length
+    (6 / chop) + 4
+  end
+
+  def chop_cycles
+    (remaining_turns / cycle_length.to_f).floor
+  end
+
+  def chop_points
+    chop_cycles * wood_points_per_cycle
+  end
+
+  def report
+    debug(
+      "== #{name} chopper would take ~#{turns} to train, costing #{cost}, " \
+      "leaving #{remaining_turns} turns with a payout of #{wood_points_per_cycle} every #{cycle_length} turns," \
+      "earning #{chop_points}-#{cost}=#{grand_total}"
+    )
+  end
+end
+
 class Controller
   attr_reader :field, :turn, :input, :grid,
     :my_camp, :opp_camp, :my_inventory, :opp_inventory,
     :cells, :trees,
     :workers, :helper, :inter, :chopper,
+    :predictions, :best_prediction,
     :training, :messages, :plans,
     :distance_between_camps,
     :t0
@@ -286,14 +326,10 @@ class Controller
     @turn = turn
     debug(@input = input)
     init_turn_variables!
+    @predictions = []
     @training = nil
     @messages = []
     @plans = {} # worker-id-keyed
-
-    # hardcoded experiments
-    # return "MOVE 0 8 5" if turn == 1
-    # return "MOVE 0 8 5" if turn == 2
-    # return "PICK 0 LEMON" if turn == 3
 
     if turn <= 1
       # in how many turns is it OK to scale straight to chopper. Can probably go lower than 70, maybe 50.
@@ -305,106 +341,19 @@ class Controller
       end
     end
 
-    # Block to do some prediction for how long what would take
+    # Predictions for which chopper to aim for.
     if chopper.nil?
-      ms("== 2 4 0 3 (best) chopper") do
-        costs = worker_cost(2, 4, 0, 3)
-        cost = costs.except("IRON").values.sum
-        turns =
-          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
-          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
-          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
-          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
-
-        remaining_turns = 300 - turns
-        wood_points_per_cycle = 4 * 4
-        chop_cycles = (remaining_turns / 6.to_f).floor
-        chop_points = chop_cycles * wood_points_per_cycle
-        grand_total = chop_points - cost
-
-        debug(
-          "== 2 4 0 3 (best) chopper would take ~#{turns} turns to train, costing #{cost}. " \
-          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 6 turns," \
-          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
-        )
-      end
-
-      ###
-
-      ms("== 2 4 0 2 chopper (-1chop)") do
-        costs = worker_cost(2, 4, 0, 2)
-        cost = costs.except("IRON").values.sum
-        turns =
-          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
-          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
-          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
-          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
-
-        remaining_turns = 300 - turns
-        wood_points_per_cycle = 4 * 4
-        chop_cycles = (remaining_turns / 7.to_f).floor
-        chop_points = chop_cycles * wood_points_per_cycle
-        grand_total = chop_points - cost
-
-        debug(
-          "== 2 4 0 2 chopper (-1chop) would take ~#{turns} turns to train, costing #{cost}. " \
-          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 7 turns," \
-          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
-        )
-      end
-
-      ###
-
-      ms("== 2 3 0 3 chopper (-1carry)") do
-        costs = worker_cost(2, 3, 0, 3)
-        cost = costs.except("IRON").values.sum
-        turns =
-          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
-          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
-          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
-          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
-
-        remaining_turns = 300 - turns
-        wood_points_per_cycle = 4 * 3
-        chop_cycles = (remaining_turns / 6.to_f).floor
-        chop_points = chop_cycles * wood_points_per_cycle
-        grand_total = chop_points - cost
-
-        debug(
-          "== 2 3 0 3 chopper (-1carry) would take ~#{turns} turns to train, costing #{cost}. " \
-          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 6 turns," \
-          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
-        )
-      end
-
-      ###
-
-      ms("== 2 3 0 2 chopper (-1chop,-1carry)") do
-        costs = worker_cost(2, 3, 0, 2)
-        cost = costs.except("IRON").values.sum
-        turns =
-          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
-          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
-          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
-          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
-
-        remaining_turns = 300 - turns
-        wood_points_per_cycle = 4 * 3
-        chop_cycles = (remaining_turns / 7.to_f).floor
-        chop_points = chop_cycles * wood_points_per_cycle
-        grand_total = chop_points - cost
-
-        debug(
-          "== 2 3 0 2 chopper (-1chop,-1carry) would take ~#{turns} turns to train, costing #{cost}. " \
-          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 7 turns," \
-          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
-        )
-      end
+      predictions << predict(2, 4, 0, 3) # best
+      predictions << predict(2, 4, 0, 2) # -1chop
+      predictions << predict(2, 3, 0, 3) # (-1carry)
+      predictions << predict(2, 3, 0, 2) # (-1carry,-1chop)
     end
 
-    if chopper.nil? && my_inventory.can_afford?(best_worker_cost)
-      debug("= OK, time to get a chopper and start chopping!")
-      @training = "TRAIN 2 4 0 3" # "TRAIN 1 1 1 0"
+    @best_prediction = predictions.sort_by { [-_1.grand_total, _1.turns] }.first
+
+    if chopper.nil? && my_inventory.can_afford?(best_prediction.costs)
+      debug("= OK, time to get chopper #{best_prediction.name} and start chopping!")
+      @training = "TRAIN #{best_prediction.name}"
     end
 
     ms("> chopper plan calc") do
@@ -442,6 +391,32 @@ class Controller
   # MSG text to display a message in the replay.
 
   private
+
+  # @return Prediction
+  def predict(move, carry, harvest, chop)
+    ms("== #{move} #{carry} #{harvest} #{chop} chopper") do
+      costs = worker_cost(move, carry, harvest, chop)
+
+      turns =
+        turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
+        turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
+        turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
+        turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
+
+      remaining_turns = 300 - (turn + turns)
+
+      p = Prediction.new(
+        move, carry, harvest, chop, costs, turns, remaining_turns
+      )
+      p.report
+      p
+    end
+  end
+
+  # relies on @best_prediction having been set
+  def aimed_chopper_cost
+    best_prediction.costs
+  end
 
   def organize_chopping(worker)
     # 0. unload if carrying wood for some reason
@@ -584,22 +559,22 @@ class Controller
       seek_to_plant_carried_banana(worker) ||
         harvest_already_stood_on_tree(
           worker,
-          *[(my_inventory.lemon < best_worker_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < best_worker_cost["PLUM"] ? "PLUM" : nil)].compact
+          *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
         ) ||
-        (my_inventory.lemon < best_worker_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
-        (my_inventory.plum < best_worker_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
-        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
-        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
-        (my_inventory.iron < best_worker_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
+        (my_inventory.iron < aimed_chopper_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
         (
-          my_inventory.lemon >= best_worker_cost["LEMON"] && my_inventory.plum >= best_worker_cost["PLUM"] &&
+          my_inventory.lemon >= aimed_chopper_cost["LEMON"] && my_inventory.plum >= aimed_chopper_cost["PLUM"] &&
             gather_iron(worker)
         ) ||
         (inter && (turns_till_chopper < 15) && seek_to_plant_banana(worker)) ||
-        (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
-        (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
-        (my_inventory.apple < best_worker_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
-        (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) # TODO, may need to detect inter already grabbing last piece
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
+        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
+        (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) # TODO, may need to detect inter already grabbing last piece
 
       debug("= not clear how helper could help scale to chopper!") if plans[worker.id].nil?
 
@@ -684,15 +659,15 @@ class Controller
           (my_inventory.plum < 6 && gather_initial_fruit(worker, "PLUM", 1)) ||
           (my_inventory.lemon < 6 && gather_initial_fruit(worker, "LEMON", 2)) ||
           (my_inventory.plum < 6 && gather_initial_fruit(worker, "PLUM", 2)) ||
-          (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
-          (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
-          (my_inventory.lemon < best_worker_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 2)) ||
-          (my_inventory.plum < best_worker_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 2)) ||
-          (my_inventory.apple < best_worker_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
-          (my_inventory.iron < best_worker_cost["IRON"] && gather_iron(worker)) ||
+          (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
+          (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
+          (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 2)) ||
+          (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 2)) ||
+          (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
+          (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) ||
           debug("= Huh? inter has nothing to do for scaling to chopper!")
-          # (my_inventory.plum < best_worker_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
-          # (my_inventory.lemon < best_worker_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
+          # (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
+          # (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
       end
       return if plans[worker.id]
     end
@@ -1113,6 +1088,7 @@ class Controller
       return 300 if yields.sum.zero?
       (count / yields.sum.to_f).ceil
     else # for fruits
+      penalty_turns = nil
       yields = []
 
       harvesters = my_workers.select(&:can_harvest?).sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
@@ -1122,23 +1098,25 @@ class Controller
           distance_to_camp = shortest_path(my_camp.node, tree.node).size - 1
 
           [tree, tree.average_fruit_yield(distance_to_camp, worker)]
-        end[i..-1].first
+        end[i..-1]&.first
 
         if best_tree
-          yields << average_yield.to_f / (2.0**i)
+          yields << average_yield.to_f / (0.8**i)
         else # no tree, maybe we can plant
           next unless my_inventory.has?(type) # since no way to get more fruit
 
+          penalty_turns ||= 15
+
           if wet_nodes_within_3_of_camp.any?
-            yields << (1/5.0) / (2.0**i)
+            yields << (1/5.0) / (0.8**i)
           else
-            yields << (1/8.0) / (2.0**i)
+            yields << (1/9.0) / (0.8**i)
           end
         end
       end
 
       return 300 if yields.sum.zero?
-      (count / yields.sum.to_f).ceil
+      (count / yields.sum.to_f).ceil + penalty_turns.to_i
     end
   end
 
@@ -1156,17 +1134,6 @@ class Controller
   # @return Array<Node>
   def shortest_path_to_drop(from_node)
     shortest_path(from_node, closest_dropoff(from_node))
-  end
-
-  # @return Hash {"PLUM" => 3, "LEMON" => 3, "APPLE" => 3}
-  def cheapest_worker_cost
-    worker_cost(1, 1, 1, 1)
-  end
-
-  def best_worker_cost
-    # TRAIN moveSpeed carryCapacity harvestPower chopPower
-    # "TRAIN 2 4 0 3" # 5, 17, 0, 10 costs
-    worker_cost(2, 4, 0, 3)
   end
 
   # @return Hash {move: 1, ..}

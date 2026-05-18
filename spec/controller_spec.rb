@@ -1313,8 +1313,8 @@ RSpec.describe Controller, instance_name: :controller do
           INPUT
         end
 
-        it "returns a command for both carry1 workers to go get iron" do
-          is_expected.to eq("MSG IROON!, IROON!; MOVE 1 12 4; MOVE 3 16 7")
+        it "returns a command to train good-enough -1chop chopper" do
+          is_expected.to eq("TRAIN 2 4 0 2; MOVE 1 12 4; MOVE 3 15 8")
         end
       end
     end
@@ -1729,8 +1729,34 @@ RSpec.describe Controller, instance_name: :controller do
           INPUT
         end
 
+        # In reality I get to chopper no later than by turn 153, so by two workers scaling takes 152 turns or so + inefficiencies
+        # Predictive algo says 204 turns :/
         it "returns a command to continue mining cuz bag not full" do
           is_expected.to eq("MSG getting seed PLUM; PICK 1 LEMON; MOVE 2 11 9")
+        end
+      end
+
+      context "when just trained inter and should decide on chopper quality (prefer cheapest scenario)" do
+        let(:turn) { 113 }
+
+        let(:input) do
+          <<~INPUT
+            6 11 4 1 11 0
+            5 6 9 7 2 0
+            4
+            BANANA 8 4 1 3 0 5
+            BANANA 13 6 1 3 0 5
+            BANANA 11 3 4 6 3 3
+            BANANA 10 7 4 6 3 3
+            3
+            0 1 10 0 1 1 1 1 0 0 0 0 0 0
+            1 0 12 9 1 1 1 1 0 0 0 0 0 0
+            2 0 12 10 2 2 2 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to train -1carry chopper, which is determined to be best at this juncture" do
+          is_expected.to eq("TRAIN 2 3 0 3; PICK 1 BANANA; MOVE 2 12 8")
         end
       end
 
