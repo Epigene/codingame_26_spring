@@ -44,7 +44,7 @@ Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
     end
   end
 end
-Cell = Struct.new(:x, :y, :worker, :tree)
+Cell = Struct.new(:x, :y, :worker, :opp_worker, :tree)
 TREE_HEALTH_MATRIX = {
   "PLUM" => {increment: 2, 1=> 6, 2=> 8, 3 => 10, 4 => 12},
   "LEMON" => {increment: 2, 1=> 6, 2=> 8, 3 => 10, 4 => 12},
@@ -915,21 +915,42 @@ class Controller
 
   def chop_wars(worker)
     xms(">> CHOP WARS calc for worker #{worker}") do
+      return if !worker.can_chop?
       # WAR, seek to fight over chopping if opp within 2 turns can be cought
       opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
       return if opp_workers_chopping.none?
 
+      # maybe already ON chop node
+      worker_tree = cells[worker.node]&.tree
+      if worker_tree && cells[worker.node]&.opp_worker && worker_tree.damaged?
+        opp_worker = cells[worker.node].opp_worker
+        turns_to_fell = worker_tree.chop_turns(opp_worker.chop_power)
+
+        # in three turns we can do PICK, DROP and then final CHOP
+        if turns_to_fell >= 3 && worker_tree.fruit?
+          return go_and_harvest(worker, worker_tree.node)
+        end
+      end
+
       chops = opp_workers_chopping.map do |opp_worker|
         tree = cells[opp_worker.node].tree
         path = shortest_path(worker.node, opp_worker.node)
-        turns_to_reach = ((path.size - 1) / worker.move_speed.to_f).ceil
+        turns_to_reach =
+          ((path.size - 1) / worker.move_speed.to_f).ceil +
+          (turns_to_drop(worker) * 2) # doubling to account for possible going opposite way. Usually will be 0 anyway
+
         turns_to_fell = tree.chop_turns(opp_worker.chop_power)
         [path, turns_to_reach, turns_to_fell]
       end
 
-      interceptable_chops = chops.select { |p, to_reach, to_fell| to_reach <= 2 && (to_reach + 1) <= to_fell }
+      interceptable_chops = chops.select { |p, to_reach, to_fell| to_fell < 5 && to_reach <= 3 && (to_reach + 1) <= to_fell }
       if interceptable_chops.any?
         path, _, _ = interceptable_chops.quick_max_by { |p, to_reach, to_fell| cells[p.last].tree.size }
+
+        if worker.full?
+          messages << "*cracks neck*"
+          return go_and_drop(worker, shortest_path_to_drop(worker.node))
+        end
 
         messages << "chop warz"
         return go_and_chop(worker, path.last)
@@ -940,6 +961,22 @@ class Controller
   # Major predictive logic
   def turns_to_gather(type, count)
     # TODO
+  end
+
+  def turns_to_drop(worker)
+    return 0 unless worker.full?
+
+    ((shortest_path_to_drop(worker.node).size - 1) / worker.move_speed.to_f).ceil + 1
+  end
+
+  # @return Node
+  def closest_dropoff(from_node)
+    dropoff_nodes.min_by { shortest_path(from_node, _1).size }
+  end
+
+  # @return Array<Node>
+  def shortest_path_to_drop(from_node)
+    shortest_path(from_node, closest_dropoff(from_node))
   end
 
   # @return Hash {"PLUM" => 3, "LEMON" => 3, "APPLE" => 3}
@@ -998,7 +1035,7 @@ class Controller
       period = wet_nodes.include?("#{x} #{y}") ? tree_period_mapping.dig(:wet, type) : tree_period_mapping.dig(:dry, type)
       tree = Tree.new(type, x, y, size, health, fruits, cooldown, period)
       @trees << tree
-      @cells["#{x} #{y}"] ||= Cell.new(x, y, nil, nil)
+      @cells["#{x} #{y}"] ||= Cell.new(x, y)
       @cells["#{x} #{y}"].tree = tree
     end
 
@@ -1016,10 +1053,11 @@ class Controller
       )
       @workers << worker
 
-      @cells["#{x} #{y}"] ||= Cell.new(x, y, nil, nil)
-      @cells["#{x} #{y}"].worker = worker
+      @cells["#{x} #{y}"] ||= Cell.new(x, y)
 
       if worker.my?
+        @cells["#{x} #{y}"].worker = worker
+
         if worker.id == 0 || worker.id == 1
           @helper = worker
         elsif worker.chop_power > 2
@@ -1027,6 +1065,8 @@ class Controller
         else
           @inter = worker
         end
+      else
+         @cells["#{x} #{y}"].opp_worker = worker
       end
     end
   end

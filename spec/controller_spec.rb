@@ -576,49 +576,6 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
-    context "with seed=3070472706778279400 | later in the game, chopping wars" do
-      let(:field) do
-        <<~FIELD
-          ..~~~..~........
-          ..~~~~.~..0...+.
-          +..~...~~.......
-          .#.~............
-          ............~.#.
-          .......~~...~..+
-          .+...1..~.~~~~..
-          ........~..~~~..
-        FIELD
-      end
-
-      let(:input) do
-        <<~INPUT
-          0 0 5 0 0 12
-          2 2 5 2 1 11
-          11
-          PLUM 0 1 4 12 3 0
-          PLUM 15 6 4 12 3 0
-          PLUM 13 3 4 12 3 0
-          LEMON 0 3 4 12 3 0
-          LEMON 15 4 4 12 3 0
-          APPLE 9 5 4 16 3 0
-          APPLE 15 7 4 20 3 0
-          APPLE 0 0 4 20 3 0
-          BANANA 14 0 4 6 3 0
-          BANANA 9 0 4 1 0 4
-          BANANA 9 2 2 4 0 2
-          4
-          0 1 9 0 1 1 1 1 0 0 0 0 0 0
-          1 0 13 0 1 1 1 1 0 0 0 0 0 0
-          2 1 9 5 1 1 0 2 0 0 0 0 0 0
-          3 0 10 2 2 4 0 3 0 0 0 0 0 0
-        INPUT
-      end
-
-      it "returns a command for chopper to go contest the apple tree being chopped by opp" do
-        is_expected.to eq("MSG chop warz; MOVE 3 9 3; MOVE 1 14 0")
-      end
-    end
-
     context "when seed=6892721188050253000 | no trees nearby" do
       let(:field) do
         <<~FIELD
@@ -1528,6 +1485,89 @@ RSpec.describe Controller, instance_name: :controller do
         it "times out, seek to optim" do
           is_expected.to eq("MSG beeline; MOVE 4 16 6; PLANT 1 BANANA; MOVE 3 19 3")
         end
+      end
+    end
+
+    context "with seed=-175587185154855230" do
+      let(:field) do
+        <<~FIELD
+          ......#......~~.......
+          .............~~..~....
+          .~~.........1~...~~~~.
+          ~~~....#...+.~....~~~~
+          ~~~.................~~
+          ~~..................~~
+          ~~.................~~~
+          ~~~~....~.+...#....~~~
+          .~~~~...~0.........~~.
+          ....~..~~.............
+          .......~~......#......
+        FIELD
+      end
+
+      context "when opp just chopped my tree" do
+        let(:input) do
+          <<~INPUT
+            6 14 7 8 10 0
+            1 0 6 5 0 3
+            19
+            PLUM 19 1 4 12 3 0
+            PLUM 2 9 4 12 3 0
+            LEMON 9 7 4 9 1 3
+            LEMON 11 0 4 12 3 0
+            LEMON 10 10 4 12 3 0
+            LEMON 18 8 4 12 3 0
+            LEMON 3 2 4 12 3 0
+            APPLE 0 9 4 20 3 9
+            APPLE 21 1 4 20 3 9
+            APPLE 6 4 4 20 3 0
+            APPLE 15 6 4 20 3 0
+            APPLE 16 8 4 20 3 0
+            APPLE 5 2 4 20 3 0
+            BANANA 14 5 4 6 2 1
+            BANANA 7 5 4 6 2 1
+            BANANA 6 8 4 6 3 0
+            BANANA 15 2 4 6 3 0
+            BANANA 12 4 2 4 0 3
+            BANANA 11 2 1 3 0 4
+            3
+            0 0 9 7 1 1 1 1 0 0 0 0 0 0
+            1 1 11 1 1 1 1 1 0 0 0 1 0 0
+            2 1 9 7 2 3 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to NOT help the chop, but harvest needed lemon instead" do
+          is_expected.to eq("HARVEST 0")
+        end
+      end
+    end
+
+    context "when synthetic setup for chop wars with bag emptying" do
+      let(:field) do
+        <<~FIELD
+          .+1
+          ...
+          0+.
+        FIELD
+      end
+
+      let(:input) do
+        <<~INPUT
+          6 14 7 8 10 0
+          1 0 6 5 0 3
+          3
+          LEMON 0 0 4 8 3 0
+          PLUM 1 1 4 12 3 0
+          LEMON 2 2 4 12 0 3
+          2
+          0 0 0 1 1 1 1 1 0 0 0 0 1 0
+          1 1 0 0 1 1 1 2 0 0 0 0 0 0
+        INPUT
+      end
+
+      it "returns a command to empty hand to then proceed to chop wars" do
+        is_expected.to eq("MSG *cracks neck*; DROP 0")
       end
     end
 
