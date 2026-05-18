@@ -312,9 +312,7 @@ class Controller
   def organize_chopping(worker)
     # 0. unload if carrying wood for some reason
     if worker.carry_wood.positive?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-
-      return go_and_drop(worker, closest_dropoff)
+      return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
     # WAR, seek to fight over chopping if opp within 2 turns can be cought
@@ -420,12 +418,16 @@ class Controller
     end
 
     debug("= no trees on map, entering endgame")
-    closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
     messages << "hugging base"
-    go_and_chop(worker, closest_dropoff)
+    go_and_chop(worker, closest_dropoff(worker.node))
   end
 
   def organize_helper(worker)
+    # 0. unload if carrying wood for some reason
+    if worker.carry_wood.positive?
+      return go_and_drop(worker, closest_dropoff(worker.node))
+    end
+
     # WAR, seek to fight over chopping if opp within 2 turns can be cought
     chop_wars(worker)
     return if plans[worker.id]
@@ -474,8 +476,7 @@ class Controller
     # == Regular helping starts ==
 
     if worker.full? && worker.carry_banana.zero?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_dropoff)
+      return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
     # Get off square chopper wants to get to
@@ -517,6 +518,11 @@ class Controller
   end
 
   def organize_intermediate(worker)
+    # 0. unload if carrying wood for some reason
+    if worker.carry_wood.positive?
+      return go_and_drop(worker, closest_dropoff(worker.node))
+    end
+
     xms("> inter chop wars") do
       chop_wars(worker) if chopper.nil?
       return if plans[worker.id]
@@ -559,8 +565,7 @@ class Controller
 
     xms("> inter dropoff calc") do
       if worker.full?
-        closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-        return go_and_drop(worker, closest_dropoff)
+        return go_and_drop(worker, closest_dropoff(worker.node))
       end
     end
 
@@ -602,8 +607,7 @@ class Controller
   # used by helper and inter
   def seek_to_chop(worker, node)
     if worker.full?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_dropoff)
+      return go_and_drop(worker, closest_dropoff(worker.node))
     else
       go_and_chop(worker, node)
     end
@@ -648,8 +652,7 @@ class Controller
     elsif seeding_bananas
       return go_and_harvest(worker, seed_node)
     elsif my_inventory.banana.positive?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_pick(worker, closest_dropoff, "BANANA")
+      return go_and_pick(worker, closest_dropoff(worker.node), "BANANA")
     elsif (banana_nodes = cells.select { |node, cell| cell&.tree&.type?("BANANA") }).any?
       closest, _cell = banana_nodes.min_by do |node, cell|
         cell.tree.turns_till_fruit(worker, shortest_path(worker.node, node))
@@ -748,8 +751,7 @@ class Controller
 
   def gather_iron(worker)
     if worker.full?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_dropoff)
+      return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
     closest_mine = mining_nodes.min_by { shortest_path(worker.node, _1).size }
@@ -852,8 +854,7 @@ class Controller
   #
   def gather_initial_fruit(worker, fruit_type, max_wait)
     if worker.full?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_dropoff)
+      return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
     if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
@@ -888,8 +889,7 @@ class Controller
   # Reserved for dire straits like last apples for chopper
   def gather_anywhere_fruit(worker, fruit_type, max_wait)
     if worker.full?
-      closest_dropoff = dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
-      return go_and_drop(worker, closest_dropoff)
+      return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
     if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
@@ -1019,6 +1019,10 @@ class Controller
     return @trees_within_3_of_camp[turn] if @trees_within_3_of_camp.key?(turn)
     @trees_within_3_of_camp[turn] = trees.select { nodes_within_3_of_camp.include?(_1.node) }
   end
+
+  #===================
+  #  TURN INIT BELOW
+  #===================
 
   def init_turn_variables!
     lines = input.split("\n")
