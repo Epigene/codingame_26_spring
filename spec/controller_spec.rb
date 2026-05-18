@@ -1803,6 +1803,67 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=3105322776010436000" do
+      let(:field) do
+        <<~FIELD
+          ......1.....#~~~~...
+          ............~~..~...
+          .........+#.....~...
+          ...#..##............
+          ....................
+          ....................
+          ............##..#...
+          ...~.....#+.........
+          ...~..~~............
+          ...~~~~#.....0......
+        FIELD
+      end
+
+      context "when fiels is wide open and paths are likely inefficient" do
+        let(:input) do
+          <<~INPUT
+            1 8 4 5 6 0
+            1 1 0 4 7 0
+            25
+            PLUM 14 1 4 12 3 0
+            PLUM 5 8 4 12 3 0
+            PLUM 19 2 4 12 3 0
+            PLUM 0 7 4 12 3 0
+            LEMON 18 0 4 12 3 0
+            LEMON 1 9 4 12 3 0
+            LEMON 15 6 4 12 3 7
+            LEMON 4 3 4 12 3 0
+            APPLE 0 4 4 20 3 0
+            APPLE 19 5 4 20 3 0
+            APPLE 5 3 4 20 1 8
+            APPLE 14 6 4 20 3 0
+            BANANA 5 7 4 6 3 0
+            BANANA 14 2 4 6 3 0
+            BANANA 5 4 4 6 3 0
+            BANANA 14 5 4 6 3 0
+            LEMON 13 8 4 12 1 8
+            LEMON 13 7 4 12 0 3
+            PLUM 14 7 4 12 0 6
+            PLUM 5 0 4 12 1 1
+            LEMON 7 0 4 12 1 5
+            APPLE 6 1 4 20 0 4
+            BANANA 4 0 4 6 1 1
+            APPLE 5 1 1 11 0 1
+            APPLE 6 2 1 11 0 5
+            4
+            0 1 7 1 1 1 1 1 0 0 1 0 0 0
+            1 0 13 8 1 1 1 1 0 0 0 0 0 0
+            2 1 8 0 3 1 2 2 0 0 1 0 0 0
+            3 0 14 7 3 1 1 1 1 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns command quickly" do
+          is_expected.to eq("MSG oh LEMON; HARVEST 1; MOVE 3 13 8")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

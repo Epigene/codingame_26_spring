@@ -326,7 +326,6 @@ class Controller
     @turn = turn
     debug(@input = input)
     init_turn_variables!
-    @predictions = []
     @training = nil
     @messages = []
     @plans = {} # worker-id-keyed
@@ -340,16 +339,6 @@ class Controller
         end
       end
     end
-
-    # Predictions for which chopper to aim for.
-    if chopper.nil?
-      predictions << predict(2, 4, 0, 3) # best
-      predictions << predict(2, 4, 0, 2) # -1chop
-      predictions << predict(2, 3, 0, 3) # (-1carry)
-      predictions << predict(2, 3, 0, 2) # (-1carry,-1chop)
-    end
-
-    @best_prediction = predictions.sort_by { [-_1.grand_total, _1.turns] }.first
 
     if chopper.nil? && my_inventory.can_afford?(best_prediction.costs)
       debug("= OK, time to get chopper #{best_prediction.name} and start chopping!")
@@ -373,8 +362,13 @@ class Controller
       *plans.values.sort_by { -_1.weight }.map(&:command)
     ].compact.join("; ")
 
+    if turn_time_remaining > 5
+      prefill_tree_paths
+    end
+
     elapsed_ms = turn_time_taken
-    raise("Turn #{turn} took #{elapsed_ms}ms to calculate, too slow!") if elapsed_ms > 60
+    debug("== turn #{turn} took #{elapsed_ms}ms to calculate")
+    raise("Turn #{turn} took #{elapsed_ms}ms to calculate, too slow!") if elapsed_ms > 55
 
     result == "" ? "WAIT" : result
   end
@@ -557,12 +551,12 @@ class Controller
       debug("= Helper will help scale to chopper")
 
       seek_to_plant_carried_banana(worker) ||
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
         harvest_already_stood_on_tree(
           worker,
           *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
         ) ||
-        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
-        (my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
         (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
         (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
         (my_inventory.iron < aimed_chopper_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
@@ -1072,51 +1066,65 @@ class Controller
     return 0 unless count.positive?
 
     if type == "IRON"
-      # start with quickest worker
-      yields = []
-      my_workers.select(&:can_chop?)
-        .sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
-        .each_with_index do |worker, i|
-          mining_cycle =
-            ((shortest_path_to_mining.size - 1) / worker.move_speed.to_f).ceil * 2 +
-            (_drop = 1) +
-            (_mining_turns = worker.mining_turns)
+      ms(">>> #turns_to_gather #{type} #{count}") do
+        yields = []
 
-          yields << (worker.carry_capacity / mining_cycle.to_f) * (0.8**i)
+        # start with quickest worker
+        my_workers.select(&:can_chop?)
+          .sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
+          .each_with_index do |worker, i|
+            mining_cycle =
+              ((shortest_path_to_mining.size - 1) / worker.move_speed.to_f).ceil * 2 +
+              (_drop = 1) +
+              (_mining_turns = worker.mining_turns)
+
+            yields << (worker.carry_capacity / mining_cycle.to_f) * (0.8**i)
+          end
+
+        return 300 if yields.sum.zero?
+        (count / yields.sum.to_f).ceil
+      end
+    else # for fruits
+      ms(">>> #turns_to_gather #{type} #{count}") do
+        penalty_turns = nil
+        yields = []
+
+        harvesters = ms(">>>> harvester lookup") do
+          my_workers.select(&:can_harvest?).sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
         end
 
-      return 300 if yields.sum.zero?
-      (count / yields.sum.to_f).ceil
-    else # for fruits
-      penalty_turns = nil
-      yields = []
+        harvesters.each_with_index do |worker, i|
+          best_tree, average_yield = ms(">>>> best_tree, average_yield lookup") do
+            trees.select { _1.type?(type) }.map do |tree|
+              camp_to_tree_path =  ms(">>>> camp->tree path") do
+                shortest_path(my_camp.node, tree.node)
+              end
+              distance_to_camp = ms(">>>> camp->tree path size") do
+                camp_to_tree_path.size - 1
+              end
 
-      harvesters = my_workers.select(&:can_harvest?).sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
+              [tree, tree.average_fruit_yield(distance_to_camp, worker)]
+            end[i..-1]&.first
+          end
 
-      harvesters.each_with_index do |worker, i|
-        best_tree, average_yield = trees.select { _1.type?(type) }.map do |tree|
-          distance_to_camp = shortest_path(my_camp.node, tree.node).size - 1
+          if best_tree
+            yields << average_yield.to_f / (0.8**i)
+          else # no tree, maybe we can plant
+            next unless my_inventory.has?(type) # since no way to get more fruit
 
-          [tree, tree.average_fruit_yield(distance_to_camp, worker)]
-        end[i..-1]&.first
+            penalty_turns ||= 15
 
-        if best_tree
-          yields << average_yield.to_f / (0.8**i)
-        else # no tree, maybe we can plant
-          next unless my_inventory.has?(type) # since no way to get more fruit
-
-          penalty_turns ||= 15
-
-          if wet_nodes_within_3_of_camp.any?
-            yields << (1/5.0) / (0.8**i)
-          else
-            yields << (1/9.0) / (0.8**i)
+            if wet_nodes_within_3_of_camp.any?
+              yields << (1/5.0) / (0.8**i)
+            else
+              yields << (1/9.0) / (0.8**i)
+            end
           end
         end
-      end
 
-      return 300 if yields.sum.zero?
-      (count / yields.sum.to_f).ceil + penalty_turns.to_i
+        return 300 if yields.sum.zero?
+        (count / yields.sum.to_f).ceil + penalty_turns.to_i
+      end
     end
   end
 
@@ -1211,7 +1219,7 @@ class Controller
 
         if worker.id == 0 || worker.id == 1
           @helper = worker
-        elsif worker.chop_power > 2
+        elsif worker.harvest_power.zero? && worker.carry_capacity >= 2 && worker.move_speed >= 2 && worker.chop_power >= 2
           @chopper = worker
         else
           @inter = worker
@@ -1219,6 +1227,43 @@ class Controller
       else
          @cells["#{x} #{y}"].opp_worker = worker
       end
+    end
+
+    init_predictions
+  end
+
+  # Predictions for which chopper to aim for.
+  def init_predictions
+    @predictions = []
+
+    if chopper.nil?
+      variants = [
+        [2, 3, 0, 2], # (-1carry,-1chop)
+        [2, 3, 0, 3], # (-1carry)
+        [2, 4, 0, 2], # -1chop
+        [2, 4, 0, 3]  # best
+      ]
+
+      variants.each do |variant|
+        p = predict(*variant)
+        @predictions << p
+
+        # no need to calc all four variants if the cheapest will take 100 turns
+        break if p.turns > 100
+      end
+    end
+
+    @best_prediction = @predictions.sort_by { [-_1.grand_total, _1.turns] }.first
+
+    nil
+  end
+
+  # a sort of postprocessing that uses time left at the end of a turn to precrunch shortest paths regarding trees
+  def prefill_tree_paths
+    trees.each do |tree|
+      break if turn_time_remaining < 1
+
+      shortest_path(my_camp.node, tree.node)
     end
   end
 
@@ -1329,11 +1374,11 @@ class Controller
       if shortest_paths.key?(key)
         shortest_paths[key]
       else
-        grid.shortest_path(from, to, excluding: excluding)
+        shortest_paths[key] = grid.shortest_path(from, to, excluding: excluding)
       end
 
     r_key = [to, from, excluding]
-    shortest_paths[r_key] =
+    shortest_paths[r_key] ||=
       if path
         path.reverse
       else
