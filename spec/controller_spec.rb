@@ -121,6 +121,116 @@ RSpec.describe Tree, instance_name: :tree do
     end
   end
 
+  describe "#average_fruit_yield(distance_to_camp, worker_movespeed)" do
+    subject(:average_fruit_yield) { tree.average_fruit_yield(distance, worker) }
+
+    context "when asking for a n4 wet apple" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 2, 2) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 1 }
+      let(:worker) { instance_double("Worker", move_speed: 1, carry_capacity: 1, harvest_power: 1) }
+
+      it { is_expected.to eq(1/2.0) }
+    end
+
+    context "when asking for a n4 wet lemon" do
+      let(:tree) { described_class.new("LEMON", 0, 0, 4, 4, 3, 3, 3) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 1 }
+      let(:worker) { instance_double("Worker", move_speed: 1, carry_capacity: 1, harvest_power: 1) }
+
+      it { is_expected.to eq(1/3.0) }
+    end
+
+    context "when asking for a 2-distance wet apple" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 2, 2) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 2 }
+      let(:worker) { instance_double("Worker", move_speed: 1, carry_capacity: 1, harvest_power: 1) }
+
+      # limiting factor is just minimum cycle length being 4
+      it { is_expected.to eq(1/4.0) }
+    end
+
+    context "when asking for a 2-distance wet apple for a 2move worker" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 2, 2) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 2 }
+      let(:worker) { instance_double("Worker", move_speed: 2, carry_capacity: 1, harvest_power: 1) }
+
+      # same as 1-move worker since movespeed can not yet bring benefit
+      it { is_expected.to eq(1/4.0) }
+    end
+
+    context "when asking for a 3-distance wet apple for a 1move worker" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 2, 2) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 3 }
+      let(:worker) { instance_double("Worker", move_speed: 1, carry_capacity: 1, harvest_power: 1) }
+
+      # same as 1-move worker since movespeed can not yet bring benefit
+      it { is_expected.to eq(0.17) }
+    end
+
+    context "when asking for a 3-distance wet apple for a 2-move worker" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 2, 2) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 3 }
+      let(:worker) { instance_double("Worker", move_speed: 2, carry_capacity: 1, harvest_power: 1) }
+
+      it { is_expected.to eq(1/4.0) }
+    end
+
+    context "when asking for a n4 dry apple" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 9, 9) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 1 }
+      let(:worker) { instance_double("Worker", move_speed: 1, carry_capacity: 1, harvest_power: 1) }
+
+      it { is_expected.to eq(1/9.0) }
+    end
+
+    context "when asking for a 2-dist dry apple" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 9, 9) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 2 }
+      let(:worker) { instance_double("Worker", move_speed: 1, carry_capacity: 1, harvest_power: 1) }
+
+      # period is limiting factor
+      it { is_expected.to eq(1/9.0) }
+    end
+
+    context "when asking for a 3-dist dry apple" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 9, 9) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 3 }
+      let(:worker) { instance_double("Worker", move_speed: 2, carry_capacity: 1, harvest_power: 1) }
+
+      # period is limiting factor
+      it { is_expected.to eq(1/9.0) }
+    end
+
+    context "when asking for a faraway dry apple" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 9, 9) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 10 }
+      let(:worker) { instance_double("Worker", move_speed: 2, carry_capacity: 2, harvest_power: 1) }
+
+      # period is limiting factor
+      it { is_expected.to eq(0.11) }
+    end
+
+    context "when asking for a faraway dry apple" do
+      let(:tree) { described_class.new("APPLE", 0, 0, 4, 4, 3, 9, 9) }
+       # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      let(:distance) { 10 }
+      let(:worker) { instance_double("Worker", move_speed: 2, carry_capacity: 2, harvest_power: 2) }
+
+      # period is limiting factor
+      it { is_expected.to eq(0.11) }
+    end
+  end
+
   describe "#chop_turns(chop_speed)" do
     subject(:chop_turns) { tree.chop_turns(chop_speed) }
 
@@ -1561,13 +1671,109 @@ RSpec.describe Controller, instance_name: :controller do
           PLUM 1 1 4 12 3 0
           LEMON 2 2 4 12 0 3
           2
-          0 0 0 1 1 1 1 1 0 0 0 0 1 0
+          0 0 0 1 1 1 1 1 0 0 1 0 0 0
           1 1 0 0 1 1 1 2 0 0 0 0 0 0
         INPUT
       end
 
       it "returns a command to empty hand to then proceed to chop wars" do
         is_expected.to eq("MSG *cracks neck*; DROP 0")
+      end
+    end
+
+    context "with seed=-5675974997497346000, wide open fields, far iron" do
+      let(:field) do
+        <<~FIELD
+          .........1..........~.
+          ~~~~.............#..~.
+          ..~~................~.
+          ..~+................~.
+          ......................
+          ...+..............+...
+          ......................
+          .~................+~..
+          .~................~~..
+          .~..#.............~~~~
+          .~..........0.........
+        FIELD
+      end
+
+      context "when just trained inter and should decide on chopper quality" do
+        let(:turn) { 2 }
+
+        let(:input) do
+          <<~INPUT
+            0 1 4 7 0 0
+            5 6 9 7 2 0
+            16
+            PLUM 20 8 4 12 1 1
+            PLUM 1 2 4 12 1 1
+            PLUM 14 1 4 12 2 4
+            PLUM 7 9 4 12 2 4
+            LEMON 11 6 4 12 3 3
+            LEMON 10 4 4 12 3 3
+            APPLE 0 7 4 20 1 1
+            APPLE 21 3 4 20 1 1
+            APPLE 8 8 4 20 0 5
+            APPLE 13 2 4 20 0 5
+            APPLE 0 8 3 17 0 1
+            APPLE 21 2 3 17 0 1
+            BANANA 8 4 1 3 0 5
+            BANANA 13 6 1 3 0 5
+            BANANA 11 3 4 6 3 3
+            BANANA 10 7 4 6 3 3
+            3
+            0 1 10 0 1 1 1 1 0 0 0 0 0 0
+            1 0 12 9 1 1 1 1 0 0 0 0 0 0
+            2 0 12 10 2 2 2 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to continue mining cuz bag not full" do
+          is_expected.to eq("MSG getting seed PLUM; PICK 1 LEMON; MOVE 2 11 9")
+        end
+      end
+
+      context "when mining last iron for chopper" do
+        let(:turn) { 108 }
+
+        let(:input) do
+          <<~INPUT
+            7 18 4 7 4 0
+            6 16 8 15 1 0
+            21
+            PLUM 20 8 4 12 3 0
+            PLUM 1 2 4 12 3 0
+            PLUM 14 1 4 12 3 0
+            PLUM 7 9 4 12 3 0
+            LEMON 11 6 4 12 3 0
+            LEMON 10 4 4 12 3 4
+            APPLE 0 7 4 20 3 0
+            APPLE 21 3 4 20 3 0
+            APPLE 8 8 4 20 3 0
+            APPLE 13 2 4 20 3 0
+            APPLE 0 8 4 20 3 0
+            APPLE 21 2 4 20 3 0
+            BANANA 8 4 4 6 3 0
+            BANANA 13 6 4 6 3 0
+            BANANA 11 3 4 6 3 0
+            BANANA 10 7 4 6 3 0
+            LEMON 12 9 4 12 3 0
+            PLUM 10 9 4 12 3 0
+            LEMON 9 1 4 12 3 7
+            LEMON 12 8 4 12 3 0
+            PLUM 10 0 4 12 3 5
+            4
+            0 1 9 1 1 1 1 1 0 1 0 0 0 0
+            1 0 16 7 1 1 1 1 0 0 0 0 0 0
+            2 0 17 7 2 2 2 1 0 0 0 0 1 0
+            3 1 9 2 1 1 1 0 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to continue mining cuz bag not full" do
+          is_expected.to eq("MSG IROON!; MOVE 1 17 7; MINE 2")
+        end
       end
     end
 

@@ -68,7 +68,7 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
     size == 4
   end
 
-  #  # lower is better. Ideally 0 - if the worker is already there. Can be negative is several fruits
+  # lower is better. Ideally 0 - if the worker is already there. Can be negative is several fruits
   #
   # @return Numeric
   def turns_till_fruit(worker, path_to)
@@ -101,6 +101,31 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
     fruiting_periods = (fruiting_turns / period.to_f).floor
 
     [3, fruits + fruiting_periods + grown_fruits].min
+  end
+
+  # NOTE, distance to camp will never be lower than 1. 1 means tree is on a drop cell and no movement wil be needed
+  #
+  # @return Float
+  def average_fruit_yield(distance_to_camp, worker)
+    move_turns = ((distance_to_camp - 1) / worker.move_speed.to_f).ceil
+    travel_turns = (move_turns * 2) + (_drop_turn = 1)
+    min_cycle = travel_turns + (_one_harvest = 1)
+
+    return 1/period.to_f if min_cycle < period
+
+    # Fruit available when arriving again
+    available_fruit = [
+      _max_fruit = 3,
+      (min_cycle / period.to_f),
+    ].min
+
+    carried_fruit = [available_fruit, worker.carry_capacity].min
+
+    harvest_turns = (carried_fruit / worker.harvest_power.to_f)
+
+    cycle_length = travel_turns + harvest_turns
+
+    (carried_fruit / cycle_length.to_f).round(2)
   end
 
   def turns_till_size(desired_size)
@@ -148,6 +173,7 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
     end
   end
 end
+
 Worker = Struct.new(:id, :player, :x, :y,
   :move_speed, :carry_capacity, :harvest_power, :chop_power,
   :carry_plum, :carry_lemon, :carry_apple, :carry_banana, :carry_iron, :carry_wood
@@ -178,7 +204,18 @@ Worker = Struct.new(:id, :player, :x, :y,
   def can_chop?
     chop_power.positive?
   end
+
+  def can_harvest?
+    harvest_power.positive?
+  end
+
+  def mining_turns
+    raise("chopless worker in minging logic, debug!") if chop_power.zero?
+
+    (carry_capacity / chop_power.to_f).ceil
+  end
 end
+
 Plan = Struct.new(:name, :worker_id, :type, :node, :weight) do
   # @return String
   def command
@@ -268,6 +305,103 @@ class Controller
       end
     end
 
+    # Block to do some prediction for how long what would take
+    if chopper.nil?
+      ms("== 2 4 0 3 (best) chopper") do
+        costs = worker_cost(2, 4, 0, 3)
+        cost = costs.except("IRON").values.sum
+        turns =
+          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
+          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
+          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
+          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
+
+        remaining_turns = 300 - turns
+        wood_points_per_cycle = 4 * 4
+        chop_cycles = (remaining_turns / 6.to_f).floor
+        chop_points = chop_cycles * wood_points_per_cycle
+        grand_total = chop_points - cost
+
+        debug(
+          "== 2 4 0 3 (best) chopper would take ~#{turns} turns to train, costing #{cost}. " \
+          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 6 turns," \
+          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
+        )
+      end
+
+      ###
+
+      ms("== 2 4 0 2 chopper (-1chop)") do
+        costs = worker_cost(2, 4, 0, 2)
+        cost = costs.except("IRON").values.sum
+        turns =
+          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
+          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
+          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
+          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
+
+        remaining_turns = 300 - turns
+        wood_points_per_cycle = 4 * 4
+        chop_cycles = (remaining_turns / 7.to_f).floor
+        chop_points = chop_cycles * wood_points_per_cycle
+        grand_total = chop_points - cost
+
+        debug(
+          "== 2 4 0 2 chopper (-1chop) would take ~#{turns} turns to train, costing #{cost}. " \
+          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 7 turns," \
+          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
+        )
+      end
+
+      ###
+
+      ms("== 2 3 0 3 chopper (-1carry)") do
+        costs = worker_cost(2, 3, 0, 3)
+        cost = costs.except("IRON").values.sum
+        turns =
+          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
+          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
+          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
+          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
+
+        remaining_turns = 300 - turns
+        wood_points_per_cycle = 4 * 3
+        chop_cycles = (remaining_turns / 6.to_f).floor
+        chop_points = chop_cycles * wood_points_per_cycle
+        grand_total = chop_points - cost
+
+        debug(
+          "== 2 3 0 3 chopper (-1carry) would take ~#{turns} turns to train, costing #{cost}. " \
+          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 6 turns," \
+          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
+        )
+      end
+
+      ###
+
+      ms("== 2 3 0 2 chopper (-1chop,-1carry)") do
+        costs = worker_cost(2, 3, 0, 2)
+        cost = costs.except("IRON").values.sum
+        turns =
+          turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
+          turns_to_gather("LEMON", costs["LEMON"] - my_inventory.lemon) +
+          turns_to_gather("APPLE", costs["APPLE"] - my_inventory.apple) +
+          turns_to_gather("IRON", costs["IRON"] - my_inventory.iron)
+
+        remaining_turns = 300 - turns
+        wood_points_per_cycle = 4 * 3
+        chop_cycles = (remaining_turns / 7.to_f).floor
+        chop_points = chop_cycles * wood_points_per_cycle
+        grand_total = chop_points - cost
+
+        debug(
+          "== 2 3 0 2 chopper (-1chop,-1carry) would take ~#{turns} turns to train, costing #{cost}. " \
+          "That would leave #{remaining_turns} turns of action with a payout of #{wood_points_per_cycle} every 7 turns," \
+          "for a total of #{chop_points}-#{cost}=#{grand_total} earned"
+        )
+      end
+    end
+
     if chopper.nil? && my_inventory.can_afford?(best_worker_cost)
       debug("= OK, time to get a chopper and start chopping!")
       @training = "TRAIN 2 4 0 3" # "TRAIN 1 1 1 0"
@@ -311,7 +445,7 @@ class Controller
 
   def organize_chopping(worker)
     # 0. unload if carrying wood for some reason
-    if worker.carry_wood.positive?
+    if worker.carry_wood.positive? || (worker.full? && worker.carry_iron.positive?)
       return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
@@ -424,7 +558,7 @@ class Controller
 
   def organize_helper(worker)
     # 0. unload if carrying wood for some reason
-    if worker.carry_wood.positive?
+    if worker.carry_wood.positive? || (worker.full? && worker.carry_iron.positive?)
       return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
@@ -519,7 +653,7 @@ class Controller
 
   def organize_intermediate(worker)
     # 0. unload if carrying wood for some reason
-    if worker.carry_wood.positive?
+    if worker.carry_wood.positive? || (worker.full? && worker.carry_iron.positive?)
       return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
@@ -960,7 +1094,52 @@ class Controller
 
   # Major predictive logic
   def turns_to_gather(type, count)
-    # TODO
+    return 0 unless count.positive?
+
+    if type == "IRON"
+      # start with quickest worker
+      yields = []
+      my_workers.select(&:can_chop?)
+        .sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
+        .each_with_index do |worker, i|
+          mining_cycle =
+            ((shortest_path_to_mining.size - 1) / worker.move_speed.to_f).ceil * 2 +
+            (_drop = 1) +
+            (_mining_turns = worker.mining_turns)
+
+          yields << (worker.carry_capacity / mining_cycle.to_f) * (0.8**i)
+        end
+
+      return 300 if yields.sum.zero?
+      (count / yields.sum.to_f).ceil
+    else # for fruits
+      yields = []
+
+      harvesters = my_workers.select(&:can_harvest?).sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
+
+      harvesters.each_with_index do |worker, i|
+        best_tree, average_yield = trees.select { _1.type?(type) }.map do |tree|
+          distance_to_camp = shortest_path(my_camp.node, tree.node).size - 1
+
+          [tree, tree.average_fruit_yield(distance_to_camp, worker)]
+        end[i..-1].first
+
+        if best_tree
+          yields << average_yield.to_f / (2.0**i)
+        else # no tree, maybe we can plant
+          next unless my_inventory.has?(type) # since no way to get more fruit
+
+          if wet_nodes_within_3_of_camp.any?
+            yields << (1/5.0) / (2.0**i)
+          else
+            yields << (1/8.0) / (2.0**i)
+          end
+        end
+      end
+
+      return 300 if yields.sum.zero?
+      (count / yields.sum.to_f).ceil
+    end
   end
 
   def turns_to_drop(worker)
@@ -981,23 +1160,24 @@ class Controller
 
   # @return Hash {"PLUM" => 3, "LEMON" => 3, "APPLE" => 3}
   def cheapest_worker_cost
-    existing_workers = my_workers.size
-
-    {
-      "PLUM" => existing_workers + 1, "LEMON" => existing_workers + 1, "APPLE" => existing_workers + 1,
-      "IRON" => existing_workers
-    }
+    worker_cost(1, 1, 1, 1)
   end
 
   def best_worker_cost
     # TRAIN moveSpeed carryCapacity harvestPower chopPower
     # "TRAIN 2 4 0 3" # 5, 17, 0, 10 costs
+    worker_cost(2, 4, 0, 3)
+  end
 
+  # @return Hash {move: 1, ..}
+  def worker_cost(move, carry, harvest, chop)
     existing_workers = my_workers.size
 
     {
-      "PLUM" => existing_workers + 4, "LEMON" => existing_workers + 16, "APPLE" => existing_workers,
-      "IRON" => existing_workers + 9
+      "PLUM" => existing_workers + (move**2),
+      "LEMON" => existing_workers + (carry**2),
+      "APPLE" => existing_workers + (harvest**2),
+      "IRON" => existing_workers + (chop**2)
     }
   end
 
@@ -1273,7 +1453,7 @@ class Controller
 
   # @return Array<Node>
   def shortest_path_to_mining
-    shortest_path_to_mining ||= mining_nodes.flat_map do |mining_node|
+    @shortest_path_to_mining ||= mining_nodes.flat_map do |mining_node|
       grid.neighbors(my_camp.node).map do |n|
         shortest_path(n, mining_node)
       end
