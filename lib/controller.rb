@@ -224,6 +224,10 @@ Worker = Struct.new(:id, :player, :x, :y,
     )
   end
 
+  def less_than_half_free?
+    (free_capacity / carry_capacity.to_f) < 0.5
+  end
+
   def can_chop?
     chop_power.positive?
   end
@@ -439,7 +443,7 @@ class Controller
 
   def organize_chopping(worker)
     # 0. unload if carrying wood for some reason
-    if worker.carry_wood.positive? || (worker.full? && worker.carry_iron.positive?)
+    if (trees.any?(&:grown?) ? worker.carry_wood.positive? : worker.full?) || (worker.full? && worker.carry_iron.positive?)
       return go_and_drop(worker, closest_dropoff(worker.node))
     end
 
@@ -546,8 +550,8 @@ class Controller
     end
 
     debug("= no trees on map, entering endgame")
-    messages << "hugging base"
-    go_and_chop(worker, closest_dropoff(worker.node))
+    messages << "hugging opp"
+    go_and_chop(worker, opp_dropoff_nodes.min_by { shortest_path(worker.node, _1).size })
   end
 
   def organize_helper(worker)
@@ -574,23 +578,8 @@ class Controller
 
       # dropping carried wood is handled
 
-      # seek to plant in a cell on my side
-      if worker.carry_seed?
-        closest_my_node = my_nodes.select { cells[_1]&.tree.nil? }
-          .min_by { shortest_path(my_camp.node, _1).size }
-
-        return go_and_plant(worker, closest_my_node, worker.carried_seed)
-      end
-
-      if cells[worker.node]&.tree
-        return go_and_chop(worker, worker.node)
-      end
-
-      # go grab a seed
-      seed = self_harvest_seed
-      if seed
-        return go_and_pick(worker, closest_dropoff(worker.node), seed)
-      end
+      seek_to_self_plant(worker)
+      return if plans[worker.id]
 
       # hmm, no seeds left, time to chop anything
       tree = trees.min_by { shortest_path(worker.node, _1.node).size }
@@ -633,6 +622,12 @@ class Controller
 
     # == Regular helping starts ==
 
+    # detect self-seeding phase
+    if trees.select(&:grown?).none?
+      seek_to_self_plant(worker)
+      return if plans[worker.id]
+    end
+
     if worker.full? && worker.carry_banana.zero?
       return go_and_drop(worker, closest_dropoff(worker.node))
     end
@@ -664,12 +659,6 @@ class Controller
         .select { cells[_1]&.tree.nil? }
         .min_by { shortest_path(my_camp.node, _1) }
       return go_and_chop(worker, nearby_empty_node) if nearby_empty_node
-    end
-
-    if turn > 285
-      # TODO, noop for now, but could chop or pre-chop something at the tail-end
-      # Definitely no sense planting anything anymore
-      return
     end
 
     seek_to_plant_banana(worker)
@@ -768,6 +757,11 @@ class Controller
       return if plans[worker.id]
     end
 
+    if trees.select(&:grown?).none?
+      seek_to_self_plant(worker)
+      return if plans[worker.id]
+    end
+
     debug("= hmm, inter has nothing to do")
   end
 
@@ -803,6 +797,38 @@ class Controller
       return go_and_drop(worker, closest_dropoff(worker.node))
     else
       go_and_chop(worker, node)
+    end
+  end
+
+  # seek to plant in a cell on my side
+  def seek_to_self_plant(worker)
+    # TODO, this could be improved to actual opp worker speed checks
+    return if workers.any? { !_1.my? && nodes_within_3_of_camp.include?(_1.node) }
+
+    if worker.carry_seed?
+      closest_my_node = my_nodes.select { cells[_1]&.tree.nil? }
+        .sort_by { [shortest_path(my_camp.node, _1).size, shortest_path(worker.node, _1)] }.first
+
+      return go_and_plant(worker, closest_my_node, worker.carried_seed)
+    end
+
+    if cells[worker.node]&.tree
+      return go_and_chop(worker, worker.node)
+    end
+
+    # go grab a seed
+    seed = self_harvest_seed
+    if seed
+      my_side_candidates = (my_nodes & dropoff_nodes) - plans.values.map(&:node)
+
+      self_seeding_node =
+        if my_side_candidates.any?
+          my_side_candidates.min_by { shortest_path(worker.node, _1).size }
+        else
+          dropoff_nodes.min_by { shortest_path(worker.node, _1).size }
+        end
+
+      return go_and_pick(worker, self_seeding_node, seed)
     end
   end
 
@@ -1106,6 +1132,7 @@ class Controller
     go(worker, tree_path.last)
   end
 
+  # assumes free-ish hands
   def chop_wars(worker)
     xms(">> CHOP WARS calc for worker #{worker}") do
       return if !worker.can_chop?
@@ -1629,6 +1656,10 @@ class Controller
 
   def dropoff_nodes
     @dropoff_nodes ||= grid.neighbors(my_camp.node)
+  end
+
+  def opp_dropoff_nodes
+    opp_dropoff_nodes ||= grid.neighbors(opp_camp.node)
   end
 
   # @return Set

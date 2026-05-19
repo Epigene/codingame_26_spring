@@ -1964,7 +1964,8 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to self-harvest bananas in my corner of map" do
-          is_expected.to eq("MSG race to bottom; PICK 1 BANANA; MOVE 3 11 6")
+          # is_expected.to eq("MSG race to bottom; PICK 1 BANANA; MOVE 3 11 6")
+          is_expected.to eq("MSG race to bottom; MOVE 1 11 6; MOVE 3 11 6")
           expect(controller.send(:turns_till_own_lemon_tree)).to eq(65)
         end
       end
@@ -2103,6 +2104,72 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command to lemon to the right, away from opp on 13 8" do
           is_expected.to eq("TRAIN 2 2 2 2; MOVE 1 13 8")
+        end
+      end
+
+      context "when it's premiere endgame and it's time to self-plant aggressively" do
+        let(:input) do
+          <<~INPUT
+            7 9 10 2 2 35
+            8 2 1 0 0 38
+            0
+            6
+            0 1 8 1 1 1 1 1 0 0 0 0 0 0
+            1 0 12 6 1 1 1 1 0 0 0 0 0 0
+            2 1 9 1 2 2 2 2 0 0 0 0 0 2
+            3 0 12 7 2 2 2 2 0 0 0 0 0 0
+            4 1 7 2 2 2 2 2 0 0 0 0 0 1
+            5 0 9 2 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for chopper to harass enemy camp while inter and helper self-plant" do
+          is_expected.to eq("MSG hugging opp; MOVE 5 8 1; MOVE 1 13 6; MOVE 3 13 8")
+        end
+      end
+
+      context "when it's premiere endgame and it's time to self-plant aggressively" do
+        let(:turn) { 226 }
+        let(:input) do
+          <<~INPUT
+            5 9 10 0 2 38
+            4 2 1 0 0 43
+            1
+            PLUM 8 1 1 6 0 8
+            6
+            0 1 8 3 1 1 1 1 0 0 0 0 0 0
+            1 0 13 8 1 1 1 1 1 0 0 0 0 0
+            2 1 8 1 2 2 2 2 0 0 0 0 0 0
+            3 0 12 9 2 2 2 2 0 0 0 0 0 0
+            4 1 7 2 2 2 2 2 1 0 0 0 0 0
+            5 0 11 2 2 4 0 3 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns a command for chopper to harass enemy camp while inter and helper self-plant" do
+          is_expected.to eq("MSG slim pickings; MOVE 5 9 2; PLANT 1 PLUM; PICK 3 PLUM")
+        end
+      end
+
+      context "when it's premiere endgame and it's time to self-plant aggressively, and helper is already taking up one of the two spots" do
+        let(:turn) { 271 }
+        let(:input) do
+          <<~INPUT
+            0 6 10 0 2 49
+            0 0 0 0 0 54
+            0
+            6
+            0 1 7 5 1 1 1 1 0 0 0 0 0 0
+            1 0 13 8 1 1 1 1 0 0 0 0 0 1
+            2 1 8 1 2 2 2 2 0 0 0 0 0 0
+            3 0 12 9 2 2 2 2 0 1 0 0 0 0
+            4 1 5 0 2 2 2 2 0 0 0 0 0 0
+            5 0 13 6 2 4 0 3 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns a command for inter to stay on the alterante best my-side self node hes already on" do
+          is_expected.to eq("MSG hugging opp; MOVE 5 12 5; DROP 1; PLANT 3 LEMON")
         end
       end
     end
