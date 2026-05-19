@@ -1968,6 +1968,38 @@ RSpec.describe Controller, instance_name: :controller do
           expect(controller.send(:turns_till_own_lemon_tree)).to eq(65)
         end
       end
+
+      context "when situation is such that getting lemons off the ground is unrealistic" do
+        let(:turn) { 17 }
+
+        let(:input) do
+          <<~INPUT
+            3 0 3 3 2 2
+            3 0 2 6 2 0
+            10
+            PLUM 1 3 3 10 0 1
+            PLUM 14 4 3 10 0 1
+            LEMON 11 2 3 10 0 5
+            LEMON 4 5 3 10 0 5
+            APPLE 6 5 3 17 0 2
+            APPLE 2 3 4 20 3 0
+            APPLE 13 4 4 20 3 0
+            BANANA 12 6 4 6 0 5
+            APPLE 6 1 2 2 0 6
+            BANANA 10 6 1 2 0 5
+            4
+            0 1 6 1 1 1 1 1 0 0 0 0 0 0
+            1 0 10 6 1 1 1 1 0 0 0 0 0 0
+            2 1 6 0 2 2 2 2 0 0 0 0 0 2
+            3 0 7 7 2 2 2 2 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns a command to continue chopping for self-harvest banana" do
+          is_expected.to eq("CHOP 1; MOVE 3 9 7")
+          # expect(controller.send(:turns_till_own_lemon_tree)).to eq(65)
+        end
+      end
     end
 
     # EXAMPLE

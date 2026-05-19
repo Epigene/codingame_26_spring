@@ -566,8 +566,8 @@ class Controller
     end
     return if plans[worker.id]
 
-    # 65 turns are know to be too many, 50 likely ok, but may go lower
-    if chopper.nil? && my_inventory.lemon < 4 && turns_till_own_lemon_tree > 50
+    # 65 turns are known to be too many, 50 likely ok, but may go lower
+    if no_way_to_scale_to_chopper
       debug("= Helper sees no time to scale to chopper, self-planting")
 
       # dropping carried wood is handled
@@ -693,7 +693,7 @@ class Controller
       return if plans[worker.id]
     end
 
-    if chopper.nil? && my_inventory.lemon < 4 && turns_till_own_lemon_tree > 50
+    if no_way_to_scale_to_chopper
       debug("== inter sees #{turns_till_own_lemon_tree} turns till lemon as too far for scaling")
 
       messages << "race to bottom"
@@ -1254,6 +1254,11 @@ class Controller
     nil
   end
 
+  # 65 turns are known to be too many, 50 likely ok, but may go lower
+  def no_way_to_scale_to_chopper
+    chopper.nil? && my_inventory.lemon < 4 && (turns_till_own_lemon_tree + turn) > 50
+  end
+
   def turns_till_chopper
     -[my_inventory.plum - 5, 0].min * 5 +
       -[my_inventory.lemon - 17, 0].min * 5 +
@@ -1483,8 +1488,8 @@ class Controller
 
     ms(">> #my_nodes init") do
       grass_nodes.each do |grass_node|
-        my_path = shortest_path(my_camp.node, grass_node).size
-        opp_path = shortest_path(opp_camp.node, grass_node).size
+        my_path = shortest_path(my_camp.node, grass_node).size - 1
+        opp_path = shortest_path(opp_camp.node, grass_node).size - 1
 
         if my_path < opp_path && opp_path > distance_between_camps
           my_nodes << grass_node
