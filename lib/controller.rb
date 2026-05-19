@@ -368,8 +368,10 @@ class Controller
       @training = "TRAIN #{best_prediction.name}"
     end
 
-    ms("> chopper plan calc") do
-      organize_chopping(chopper) if chopper
+    if chopper
+      ms("> chopper plan calc") do
+        organize_chopping(chopper)
+      end
     end
 
     ms("> helper plan calc") do
@@ -698,37 +700,32 @@ class Controller
 
       messages << "race to bottom"
 
-      non_self_seed_banana = trees.select { _1.type?("BANANA") }
-        .select { !my_nodes.include?(_1.node) }
+      # don't get in the way of helper's self-seed harvesting
+      helper_chop = cells[helper.node]&.tree&.node
+
+      bananatree = trees.select { _1.type?("BANANA") && _1.node != helper_chop }
         .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
 
-      if non_self_seed_banana
-        return seek_to_chop(worker, non_self_seed_banana.node)
+      if bananatree
+        return seek_to_chop(worker, bananatree.node)
       end
 
-      plumtree = trees.select { _1.type?("PLUM") }
+      plumtree = trees.select { _1.type?("PLUM") && _1.node != helper_chop }
         .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
       if plumtree
         return seek_to_chop(worker, plumtree.node)
       end
 
-      lemontree = trees.select { _1.type?("LEMON") }
+      lemontree = trees.select { _1.type?("LEMON") && _1.node != helper_chop }
         .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
       if lemontree
         return seek_to_chop(worker, lemontree.node)
       end
 
-      appletree = trees.select { _1.type?("APPLE") }
+      appletree = trees.select { _1.type?("APPLE") && _1.node != helper_chop }
         .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
       if appletree
         return seek_to_chop(worker, appletree.node)
-      end
-
-      self_seed_banana = trees.select { _1.type?("BANANA") }
-        .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
-
-      if self_seed_banana
-        return seek_to_chop(worker, self_seed_banana.node)
       end
     end
 
@@ -894,8 +891,8 @@ class Controller
     end
 
     regular_path, _ = nodes_within_3_of_camp.select { cells[_1].nil? || cells[_1].tree.nil? }
-      .map { [shortest_path(my_camp.node, _1), shortest_path(worker.node, _1)] }
-      .min_by { _1.size + _2.size }
+      .map { [shortest_path(my_camp.node, _1), shortest_path(worker.node, _1), shortest_path(opp_camp.node, _1)] }
+      .min_by { _1.size + _2.size - _3.size }
 
     if regular_path
       return handle_planting_at_end_of(worker, regular_path, "LEMON")
@@ -1119,12 +1116,25 @@ class Controller
       # maybe already ON chop node
       worker_tree = cells[worker.node]&.tree
       if worker_tree && cells[worker.node]&.opp_worker && worker_tree.damaged?
-        opp_worker = cells[worker.node].opp_worker
-        turns_to_fell = worker_tree.chop_turns(opp_worker.chop_power)
+        # hey, maybe we're next to base and we can wait efficiently with harvesting in the meantime
+        if dropoff_nodes.include?(worker_tree.node)
+          opp_worker = cells[worker.node].opp_worker
+          turns_to_fell = worker_tree.chop_turns(opp_worker.chop_power)
 
-        # in three turns we can do PICK, DROP and then final CHOP
-        if turns_to_fell >= 3 && worker_tree.fruit?
-          return go_and_harvest(worker, worker_tree.node)
+          # in three turns we can do PICK, DROP and then final CHOP
+          if turns_to_fell >= 3 && worker_tree.fruit?
+            return go_and_harvest(worker, worker_tree.node)
+          end
+        else # can't harvest in meantime, Need to chop or wait
+          opp_worker = cells[worker.node]&.opp_worker
+
+          if worker.chop_power > opp_worker.chop_power
+            # we have the better chop, so might as well put and end to this war
+            go_and_chop(worker, worker.node)
+          else
+            messages << "#{worker.id} waiting"
+            go(worker, worker.node) # as in stay put without doing anything
+          end
         end
       end
 
@@ -1139,7 +1149,13 @@ class Controller
         [path, turns_to_reach, turns_to_fell]
       end
 
-      interceptable_chops = chops.select { |p, to_reach, to_fell| to_fell < 5 && to_reach <= 3 && (to_reach + 1) <= to_fell }
+      interceptable_chops =
+        if trees.size > 2
+          chops.select { |p, to_reach, to_fell| to_fell < 5 && to_reach <= 3 && (to_reach + 1) <= to_fell }
+        else # as in last 2 trees
+          chops.select { |p, to_reach, to_fell| to_fell < 6 && to_reach <= 5 && (to_reach + 1) <= to_fell }
+        end
+
       if interceptable_chops.any?
         path, _, _ = interceptable_chops.quick_max_by { |p, to_reach, to_fell| cells[p.last].tree.size }
 
@@ -1159,7 +1175,7 @@ class Controller
     return 0 unless count.positive?
 
     if type == "IRON"
-      ms(">>> #turns_to_gather #{type} #{count}") do
+      xms(">>> #turns_to_gather #{type} #{count}") do
         yields = []
 
         # start with quickest worker
@@ -1178,7 +1194,7 @@ class Controller
         (count / yields.sum.to_f).ceil
       end
     else # for fruits
-      ms(">>> #turns_to_gather #{type} #{count}") do
+      xms(">>> #turns_to_gather #{type} #{count}") do
         penalty_turns = nil
         yields = []
 
@@ -1247,7 +1263,9 @@ class Controller
 
   # @return String, nil
   def self_harvest_seed
-    %w[BANANA PLUM LEMON APPLE].each do |type|
+    # %w[BANANA PLUM LEMON APPLE].each do |type|
+    # apples not worth it
+    %w[BANANA PLUM LEMON].each do |type|
       return type if my_inventory.has?(type)
     end
 

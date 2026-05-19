@@ -1923,7 +1923,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
-    context "with seed=" do
+    context "with seed=4799495527170431000 | Testing race to the bottom against WeepingAngel89" do
       let(:field) do
         <<~FIELD
           .....1.......~..
@@ -1964,7 +1964,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to self-harvest bananas in my corner of map" do
-          is_expected.to eq("MSG race to bottom; PICK 1 BANANA; MOVE 3 8 7")
+          is_expected.to eq("MSG race to bottom; PICK 1 BANANA; MOVE 3 11 6")
           expect(controller.send(:turns_till_own_lemon_tree)).to eq(65)
         end
       end
@@ -1998,6 +1998,111 @@ RSpec.describe Controller, instance_name: :controller do
         it "returns a command to continue chopping for self-harvest banana" do
           is_expected.to eq("CHOP 1; MOVE 3 9 7")
           # expect(controller.send(:turns_till_own_lemon_tree)).to eq(65)
+        end
+      end
+
+      context "when helper is self-seeding a plum" do
+        let(:turn) { 44 }
+
+        let(:input) do
+          <<~INPUT
+            2 0 3 0 2 12
+            3 0 0 6 2 6
+            8
+            PLUM 1 3 4 12 3 6
+            LEMON 4 5 4 12 2 2
+            APPLE 6 5 4 20 2 2
+            APPLE 2 3 4 20 3 0
+            APPLE 13 4 4 20 3 0
+            BANANA 12 6 4 6 3 0
+            PLUM 11 7 1 4 0 6
+            APPLE 4 1 1 10 0 8
+            4
+            0 1 4 1 1 1 1 1 0 0 0 0 0 0
+            1 0 11 7 1 1 1 1 0 0 0 0 0 0
+            2 1 10 0 2 2 2 2 0 0 0 0 0 2
+            3 0 10 6 2 2 2 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter not to desire it, got to nearby banana instead" do
+          is_expected.to eq("MSG race to bottom; CHOP 1; MOVE 3 12 6")
+        end
+      end
+
+      context "when helper is self-seeding a plum" do
+        let(:turn) { 101 }
+
+        let(:input) do
+          <<~INPUT
+            0 0 1 0 2 24
+            0 0 0 6 2 18
+            1
+            APPLE 2 3 4 14 3 0
+            4
+            0 1 6 5 1 1 1 1 0 0 0 0 0 0
+            1 0 11 7 1 1 1 1 0 0 0 0 0 0
+            2 1 2 3 2 2 2 2 0 0 0 0 0 0
+            3 0 2 3 2 2 2 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter not to desire it, got to nearby banana instead" do
+          is_expected.to eq("MSG 3 waiting; MOVE 1 11 6; MOVE 3 2 3")
+        end
+      end
+    end
+
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          ..............~~~~~.
+          .......1......~~~~..
+          ............+~~~~~..
+          .............~~~....
+          .#....#......~~~~...
+          ...~~~~......#....#.
+          ....~~~.............
+          ..~~~~~+............
+          ..~~~~......0.......
+          .~~~~~..............
+        FIELD
+      end
+
+      context "when theres plenty of space to the right, away from opp" do
+        let(:input) do
+          <<~INPUT
+            5 8 6 3 5 0
+            5 8 6 3 5 0
+            20
+            PLUM 7 2 2 8 0 2
+            PLUM 12 7 2 8 0 2
+            PLUM 7 3 4 12 3 2
+            PLUM 12 6 4 12 3 2
+            PLUM 4 4 4 12 3 3
+            PLUM 15 5 4 12 3 3
+            LEMON 17 6 4 12 1 6
+            LEMON 2 3 4 12 1 6
+            LEMON 16 3 3 10 0 2
+            LEMON 3 6 3 10 0 2
+            APPLE 16 5 2 14 0 2
+            APPLE 3 4 2 14 0 2
+            APPLE 19 3 4 20 1 5
+            APPLE 0 6 4 20 1 5
+            APPLE 19 5 4 20 0 2
+            APPLE 0 4 4 20 0 2
+            BANANA 19 1 3 5 0 5
+            BANANA 0 8 3 5 0 5
+            BANANA 6 8 4 6 1 3
+            BANANA 13 1 4 6 1 3
+            2
+            0 1 7 1 1 1 1 1 0 0 0 0 0 0
+            1 0 12 8 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to lemon to the right, away from opp on 13 8" do
+          is_expected.to eq("TRAIN 2 2 2 2; MOVE 1 13 8")
         end
       end
     end
