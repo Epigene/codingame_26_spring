@@ -331,7 +331,7 @@ class Controller
     :predictions, :best_prediction,
     :training, :messages, :plans,
     :distance_between_camps,
-    :t0
+    :init_start, :t0
 
   # Trees differ in cooldown and health as follows: | TRAIN moveSpeed carryCapacity harvestPower chopPower
   #                     PLUM	LEMON	APPLE	BANANA
@@ -350,11 +350,8 @@ class Controller
 
   # @param field String # multiline heredoc style
   def initialize(field:)
-    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     @field = field
-    init_grid
-    t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    debug("> Field init took #{((t1 - t0) * 1000).round}ms")
+    ms("> Grid init") { init_grid }
   end
 
   def inspect
@@ -1496,6 +1493,7 @@ class Controller
 
   # Grid init is a simple fill, bet we make caps leave-only (and maybe rocks in future leagues)
   def init_grid
+    @init_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     lines = field.split("\n")
     @grid = Grid.new(lines.first.size, lines.size, fill: true)
 
@@ -1534,18 +1532,6 @@ class Controller
       end
     end
 
-    ms(">> dropoff points -> all grass init") do
-      grid.neighbors(my_camp.node).each do |node|
-        grass_nodes.each do |grass_node|
-          shortest_path(node, grass_node)
-        end
-      end
-    end
-    #==
-
-    ms(">> wet node init") { wet_nodes_within_3_of_camp }
-    ms(">> seed note init") { seed_node }
-
     ms(">> #my_nodes init") do
       grass_nodes.each do |grass_node|
         my_path = shortest_path(my_camp.node, grass_node).size - 1
@@ -1556,6 +1542,8 @@ class Controller
         end
       end
     end
+
+    return if init_time_remaining < 50
 
     #===
     return if defined?(LOCAL)
@@ -1583,6 +1571,19 @@ class Controller
           next if node == other_node
 
           shortest_path(node, other_node)
+        end
+      end
+    end
+
+    ms(">> wet node init") { wet_nodes_within_3_of_camp }
+    ms(">> seed note init") { seed_node }
+
+    ms(">> dropoff points -> all grass init") do
+      grid.neighbors(my_camp.node).each do |node|
+        break if init_time_remaining < 10
+
+        grass_nodes.each do |grass_node|
+          shortest_path(node, grass_node)
         end
       end
     end
@@ -1719,6 +1720,16 @@ class Controller
     }
   end
 
+  def init_time_taken
+    t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    elapsed_ms = ((t1 - init_start) * 1000.0).round
+  end
+
+  INIT_TIME = 950
+  def init_time_remaining
+    INIT_TIME - init_time_taken
+  end
+
   # @return Numeric # in ms
   def turn_time_taken
     t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -1729,6 +1740,6 @@ class Controller
   # @return Numeric # in ms
   TURN_TIME = 45
   def turn_time_remaining
-    45 - turn_time_taken
+    TURN_TIME - turn_time_taken
   end
 end
