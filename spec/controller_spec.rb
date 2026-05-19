@@ -2257,6 +2257,59 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=-8264371801288317000 | interesting one-cell bridge map" do
+      let(:field) do
+        <<~FIELD
+          .........+....~.......
+          .......~...1..~~~.....
+          .#..~~~~.....~~~~.....
+          ..+..~~~~...~~~~~.....
+          ......~~~~.~~~~~......
+          .......~~~..~~~.......
+          ......~~~~~.~~~~......
+          .....~~~~~...~~~~..+..
+          .....~~~~.....~~~~..#.
+          .....~~~..0...~.......
+          .......~....+.........
+        FIELD
+      end
+
+      context "when interesting one-cell bridge map" do
+        let(:input) do
+          <<~INPUT
+            8 5 9 6 8 0
+            8 5 9 6 8 0
+            16
+            PLUM 0 5 2 8 0 2
+            PLUM 21 5 2 8 0 2
+            PLUM 8 0 4 12 1 2
+            PLUM 13 10 4 12 1 2
+            PLUM 19 2 3 10 0 2
+            PLUM 2 8 3 10 0 2
+            LEMON 1 6 4 12 0 8
+            LEMON 20 4 4 12 0 8
+            LEMON 9 10 1 6 0 1
+            LEMON 12 0 1 6 0 1
+            APPLE 19 9 4 20 0 3
+            APPLE 2 1 4 20 0 3
+            BANANA 0 7 1 3 0 5
+            BANANA 21 3 1 3 0 5
+            BANANA 20 7 4 6 0 2
+            BANANA 1 3 4 6 0 2
+            2
+            0 0 10 9 1 1 1 1 0 0 0 0 0 0
+            1 1 11 1 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "inits seed node correctly to tucked-away 8 9" do
+          subject
+          # is_expected.to eq("TODO")
+          expect(controller.send(:seed_node)).to eq("8 9")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

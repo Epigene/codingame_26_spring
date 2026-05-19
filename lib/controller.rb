@@ -1660,9 +1660,21 @@ class Controller
 
     @seed_node =
       if wet_nodes_within_3_of_camp.any?
-        wet_nodes_within_3_of_camp.max_by { (grid.neighbors(_1) & nodes_within_3_of_camp).size }
+        wet_nodes_within_3_of_camp.sort_by do |node|
+          [
+            -(grid.neighbors(node) & nodes_within_3_of_camp).size,
+            shortest_path(my_camp.node, node).size,
+            -shortest_path(opp_camp.node, node).size
+          ]
+        end.first
       else
-        nodes_within_3_of_camp.max_by { (grid.neighbors(_1) & nodes_within_3_of_camp).size }
+        nodes_within_3_of_camp.sort_by do |node|
+          [
+            -(grid.neighbors(node) & nodes_within_3_of_camp).size,
+            shortest_path(my_camp.node, node).size,
+            -shortest_path(opp_camp.node, node).size
+          ]
+        end.first
       end
 
     debug("= Seed node is #{@seed_node}")
