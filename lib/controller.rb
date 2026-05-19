@@ -80,6 +80,13 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
     [distance_penalty, cooldown_penalty].max
   end
 
+  def turns_till_chop(worker, path_to)
+    move_turns = ((path_to.size - 1) / worker.move_speed.to_f).ceil
+    chop_turns = chop_turns(worker.chop_power)
+
+    move_turns + chop_turns
+  end
+
   def fruits_at_arrival(turns)
     return 3 if fruits == 3
 
@@ -192,6 +199,22 @@ Worker = Struct.new(:id, :player, :x, :y,
 
   def carrying?(fruit_type, at_least_count = 1)
     send("carry_#{fruit_type.to_s.downcase}") >= at_least_count
+  end
+
+  def carry_seed?
+    carrying?("PLUM") ||
+      carrying?("LEMON") ||
+      carrying?("APPLE") ||
+      carrying?("BANANA")
+  end
+
+  # Expects #carry_seed? to have been called beforehand
+  def carried_seed
+    %w[PLUM LEMON APPLE BANANA].each do |type|
+      return type if carrying?(type)
+    end
+
+    raise("#carried_seed called on a non-carrying worker")
   end
 
   # @return Integer
@@ -538,9 +561,39 @@ class Controller
     # ENDGAME, I'm winning, let's liquidate
     if my_inventory.score > opp_inventory.score + 40 && trees.size < 6
       tree = trees.min_by { shortest_path(worker.node, _1.node) }
+      messages << "endgame"
       seek_to_chop(worker, tree.node) if tree
     end
     return if plans[worker.id]
+
+    # 65 turns are know to be too many, 50 likely ok, but may go lower
+    if chopper.nil? && my_inventory.lemon < 4 && turns_till_own_lemon_tree > 50
+      debug("= Helper sees no time to scale to chopper, self-planting")
+
+      # dropping carried wood is handled
+
+      # seek to plant in a cell on my side
+      if worker.carry_seed?
+        closest_my_node = my_nodes.select { cells[_1]&.tree.nil? }
+          .min_by { shortest_path(my_camp.node, _1).size }
+
+        return go_and_plant(worker, closest_my_node, worker.carried_seed)
+      end
+
+      if cells[worker.node]&.tree
+        return go_and_chop(worker, worker.node)
+      end
+
+      # go grab a seed
+      seed = self_harvest_seed
+      if seed
+        return go_and_pick(worker, closest_dropoff(worker.node), seed)
+      end
+
+      # hmm, no seeds left, time to chop anything
+      tree = trees.min_by { shortest_path(worker.node, _1.node).size }
+      return go_and_chop(worker, tree.node) if tree
+    end
 
     # Initial boosting has one goal - be able to afford an excellent chopper worker.
     # It consists of 3 subgoals:
@@ -635,14 +688,54 @@ class Controller
     xms("> inter endgame") do
       if my_inventory.score > opp_inventory.score + 40 && trees.size < 6
         tree = trees.min_by { shortest_path(worker.node, _1.node) }
-        messages << "endgame"
         seek_to_chop(worker, tree.node) if tree
       end
       return if plans[worker.id]
     end
 
+    if chopper.nil? && my_inventory.lemon < 4 && turns_till_own_lemon_tree > 50
+      debug("== inter sees #{turns_till_own_lemon_tree} turns till lemon as too far for scaling")
+
+      messages << "race to bottom"
+
+      non_self_seed_banana = trees.select { _1.type?("BANANA") }
+        .select { !my_nodes.include?(_1.node) }
+        .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
+
+      if non_self_seed_banana
+        return seek_to_chop(worker, non_self_seed_banana.node)
+      end
+
+      plumtree = trees.select { _1.type?("PLUM") }
+        .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
+      if plumtree
+        return seek_to_chop(worker, plumtree.node)
+      end
+
+      lemontree = trees.select { _1.type?("LEMON") }
+        .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
+      if lemontree
+        return seek_to_chop(worker, lemontree.node)
+      end
+
+      appletree = trees.select { _1.type?("APPLE") }
+        .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
+      if appletree
+        return seek_to_chop(worker, appletree.node)
+      end
+
+      self_seed_banana = trees.select { _1.type?("BANANA") }
+        .min_by { _1.turns_till_chop(worker, shortest_path(worker.node, _1.node)) }
+
+      if self_seed_banana
+        return seek_to_chop(worker, self_seed_banana.node)
+      end
+    end
+
     xms("> inter chopper scaling") do
       if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+        debug("== inter helping scale to chopper")
+
         (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
           (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
           (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 1)) ||
@@ -1152,11 +1245,84 @@ class Controller
     }
   end
 
+  # @return String, nil
+  def self_harvest_seed
+    %w[BANANA PLUM LEMON APPLE].each do |type|
+      return type if my_inventory.has?(type)
+    end
+
+    nil
+  end
+
   def turns_till_chopper
     -[my_inventory.plum - 5, 0].min * 5 +
       -[my_inventory.lemon - 17, 0].min * 5 +
       -[my_inventory.apple - 1, 0].min * 5 +
       -[my_inventory.iron - 10, 0].min * shortest_path_to_mining.size * 2
+  end
+
+  # Not just tree, but 1st fruit from it
+  def turns_till_own_lemon_tree
+    @turns_till_own_lemon_tree ||= {}
+    return @turns_till_own_lemon_tree[turn] if @turns_till_own_lemon_tree.key?(turn)
+
+    nearby_lemon = trees_within_3_of_camp.select { _1.type?("LEMON") }
+      .min_by { _1.turns_till_fruit(helper, shortest_path(helper.node, _1.node)) }
+
+    if nearby_lemon
+      return @turns_till_own_lemon_tree[turn] =
+        nearby_lemon.turns_till_fruit(helper, shortest_path(helper.node, nearby_lemon.node))
+    end
+
+    # ok, maybe I can plant
+    if my_inventory.lemon.positive?
+      if wet_nodes_within_3_of_camp.any?
+        example_node = wet_nodes_within_3_of_camp.first
+        cd_and_period = tree_period_mapping.dig(:wet, "LEMON")
+        return @turns_till_own_lemon_tree[turn] = Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
+          .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+        # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      else
+        example_node = dropoff_nodes.first
+        cd_and_period = tree_period_mapping.dig(:dry, "LEMON")
+        return @turns_till_own_lemon_tree[turn] = Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
+          .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+        # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+      end
+    end
+
+    # uff, no nearby trees and can't plant due to missing seeds. Only option is to
+    # get a seed from further trees, get back, and plant it.
+    possibilities = trees.select { _1.type?("LEMON") }
+      .map do |tree|
+        [
+          tree,
+          tree.turns_till_fruit(helper, shortest_path(helper.node, tree.node)),
+          _get_back_turns = shortest_path(tree.node, my_camp.node).size - 2,
+          _new_growth =
+            if wet_nodes_within_3_of_camp.any?
+              example_node = wet_nodes_within_3_of_camp.first
+              cd_and_period = tree_period_mapping.dig(:wet, "LEMON")
+              Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
+                .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+              # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+            else
+              example_node = dropoff_nodes.first
+              cd_and_period = tree_period_mapping.dig(:dry, "LEMON")
+              Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
+                .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+              # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
+            end
+        ]
+      end
+
+    best = possibilities.map do |tree, turns_till_fruit, get_back_turns, new_growth|
+      turns_till_fruit + get_back_turns + new_growth
+    end.min
+
+    return @turns_till_own_lemon_tree[turn] = best if best
+
+    return @turns_till_own_lemon_tree[turn] = 300
   end
 
   def my_workers

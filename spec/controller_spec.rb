@@ -1923,6 +1923,53 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          .....1.......~..
+          ~~.....#..#..~..
+          ..#....#........
+          ........+#...##.
+          .##...#+........
+          ........#....#..
+          ..~..#..#.....~~
+          ..~.......0.....
+        FIELD
+      end
+
+      context "when situation is such that getting lemons off the ground is unrealistic" do
+        let(:turn) { 2 }
+
+        let(:input) do
+          <<~INPUT
+            3 0 3 6 2 0
+            3 0 3 6 2 0
+            10
+            PLUM 1 3 2 8 0 8
+            PLUM 14 4 2 8 0 8
+            LEMON 11 2 1 6 0 4
+            LEMON 4 5 1 6 0 4
+            APPLE 9 2 2 14 0 8
+            APPLE 6 5 2 14 0 8
+            APPLE 2 3 4 20 3 2
+            APPLE 13 4 4 20 3 2
+            BANANA 12 6 1 3 0 2
+            BANANA 3 1 1 3 0 2
+            4
+            0 1 6 0 1 1 1 1 0 0 0 0 0 0
+            1 0 10 6 1 1 1 1 0 0 0 0 0 0
+            2 1 5 0 2 2 2 2 0 0 0 0 0 0
+            3 0 10 7 2 2 2 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to self-harvest bananas in my corner of map" do
+          is_expected.to eq("MSG race to bottom; PICK 1 BANANA; MOVE 3 8 7")
+          expect(controller.send(:turns_till_own_lemon_tree)).to eq(65)
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
