@@ -1,3 +1,4 @@
+# :type, :x, :y, :size, :health, :fruits, :cooldown, :period
 RSpec.describe Tree, instance_name: :tree do
   describe "#turns_till_size(size)" do
     subject(:turns_till_size) { tree.turns_till_size(size) }
@@ -68,6 +69,37 @@ RSpec.describe Tree, instance_name: :tree do
     end
     context "when it's a size 1 apple with full HP" do
       let(:tree) { Tree.new("APPLE", 0, 0, 1, 11, 0, 1, 8) }
+
+      it { is_expected.to be(false) }
+    end
+  end
+
+  describe "#choppable_for_full_yield(chop_power)" do
+    subject(:choppable_for_full_yield) { tree.choppable_for_full_yield(chop_power) }
+
+    let(:chop_power) { 3 }
+
+    context "when the tree is grown anyway" do
+      let(:tree) { described_class.new("BANANA", 0, 0, 4, 6, 1, 1, 6) }
+
+      it { is_expected.to be(true) }
+    end
+
+    context "when the tree is size 3 and will grow in 1 turn" do
+      let(:tree) { described_class.new("BANANA", 0, 0, 3, 5, 0, 1, 6) }
+
+      it { is_expected.to be(true) }
+    end
+
+    context "when the tree is size 3 and will grow in 2 turns with a chop power of 2" do
+      let(:chop_power) { 2 }
+      let(:tree) { described_class.new("BANANA", 0, 0, 3, 5, 0, 2, 6) }
+
+      it { is_expected.to be(true) }
+    end
+
+    context "when the tree is size 2 and will grow in 1 turn" do
+      let(:tree) { described_class.new("BANANA", 0, 0, 2, 4, 0, 1, 6) }
 
       it { is_expected.to be(false) }
     end
@@ -2170,6 +2202,57 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command for inter to stay on the alterante best my-side self node hes already on" do
           is_expected.to eq("MSG hugging opp; MOVE 5 12 5; DROP 1; PLANT 3 LEMON")
+        end
+      end
+    end
+
+    context "with SYNTHETIC SETUP for a banana that will grow next turn to size 4 and its ok to start chopping it already" do
+      let(:field) do
+        <<~FIELD
+          ......~~....##.+
+          ..1.~~~~..#.#..#
+          #....~...#.....#
+          ~.............~~
+          ~~.............~
+          #.....#...~....#
+          #..#.#..~~~~.0..
+          +.##....~~......
+        FIELD
+      end
+
+      context "when " do
+        let(:input) do
+          <<~INPUT
+            0 1 11 1 0 8
+            0 0 3 5 3 0
+            15
+            LEMON 7 2 4 12 3 0
+            LEMON 8 5 4 12 3 0
+            LEMON 7 5 4 12 3 0
+            LEMON 8 2 4 12 3 0
+            BANANA 9 4 4 6 3 0
+            BANANA 6 3 4 6 3 0
+            LEMON 2 0 4 12 3 0
+            PLUM 3 0 4 12 3 0
+            LEMON 5 3 4 12 3 0
+            PLUM 4 3 4 12 3 0
+            LEMON 3 3 4 12 3 0
+            BANANA 13 5 3 5 0 1
+            BANANA 13 4 4 6 0 0
+            BANANA 14 5 2 4 0 5
+            BANANA 14 4 2 4 0 3
+            6
+            0 1 3 3 1 1 1 1 0 0 0 0 0 0
+            1 0 13 4 1 1 1 1 0 0 0 0 0 0
+            2 1 3 1 2 1 2 1 0 0 0 0 0 0
+            3 0 12 6 2 1 1 1 0 0 0 0 0 0
+            4 0 13 5 2 4 0 2 0 0 0 0 0 0
+            5 1 2 2 2 3 1 2 0 0 0 0 3 0
+          INPUT
+        end
+
+        it "returns a command to chop the banana already on" do
+          is_expected.to eq("CHOP 4; MOVE 1 13 5; MOVE 3 12 4")
         end
       end
     end

@@ -64,6 +64,22 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
     fruits >= 1
   end
 
+  # A bit more flexible than #grown? because takes into account time to chop+growth
+  def choppable_for_full_yield(chop_power)
+    raise("#choppable_for_full_yield called for non-chopping worker, debug!") if chop_power.zero?
+
+    return true if grown?
+
+    copy = dup
+
+    loop do
+      copy.health -= chop_power
+      return copy.size == 4 unless copy.health.positive?
+
+      copy.apply_turn
+    end
+  end
+
   def grown?
     size == 4
   end
@@ -488,13 +504,12 @@ class Controller
       return go_and_chop(worker, seed_node)
     end
 
-    # 2. seed is open, chop bananas, then grown trees next to seed, finally anything
-    grown_banana_nodes = nodes_within_3_of_camp_except_seed
-      .select { cells[_1]&.tree && cells[_1].tree.grown? && cells[_1].tree.type?("BANANA") }
-      # TODO, see if worker can make it to my tree being felled by opp
+    # 2. seed is open, now chop bananas
+    choppable = nodes_within_3_of_camp_except_seed
+      .select { cells[_1]&.tree && cells[_1].tree.type?("BANANA") && cells[_1].tree.choppable_for_full_yield(worker.chop_power) }
 
-    if grown_banana_nodes.any?
-      closest = grown_banana_nodes.min_by { shortest_path(worker.node, _1).size }
+    if choppable.any?
+      closest = choppable.min_by { shortest_path(worker.node, _1).size }
       return go_and_chop(worker, closest)
     end
 
