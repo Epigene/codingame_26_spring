@@ -638,6 +638,8 @@ RSpec.describe Controller, instance_name: :controller do
     end
 
     context "when initialized with seed=4409877015551483400 | when two wet lemons are planted and now iron mining is in order" do
+      let(:turn) { 15 } # at least
+
       let(:field) do
         <<~FIELD
           ..........~~#...
@@ -1860,6 +1862,63 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns command quickly" do
           is_expected.to eq("MSG oh LEMON; HARVEST 1; MOVE 3 13 8")
+        end
+      end
+    end
+
+    context "with seed=-2870672166963997000" do
+      let(:field) do
+        <<~FIELD
+          ~#...~...........~~~
+          ~~...~.#..#.....~~~~
+          ....#~~......1...~~.
+          ........#........~~.
+          ..~.......+......~~.
+          .~~......+.......~..
+          .~~........#........
+          .~~...0......~~#....
+          ~~~~.....#..#.~...~~
+          ~~~...........~...#~
+        FIELD
+      end
+
+      context "when I have everything for a TRAIN 2 3 0 3, but it would be better to just gather lemons" do
+        let(:turn) { 47 }
+        let(:input) do
+          <<~INPUT
+            7 10 7 5 10 0
+            6 4 4 5 6 0
+            20
+            PLUM 14 2 4 12 1 2
+            PLUM 5 7 4 12 3 0
+            LEMON 17 6 4 12 3 0
+            LEMON 2 3 4 12 3 0
+            LEMON 15 6 4 12 2 6
+            LEMON 4 3 4 12 3 0
+            APPLE 18 7 4 20 3 0
+            APPLE 1 2 4 20 3 0
+            BANANA 14 4 4 6 3 0
+            BANANA 5 5 4 6 3 0
+            BANANA 8 6 4 6 3 0
+            BANANA 11 3 4 6 3 0
+            APPLE 13 3 4 20 1 1
+            LEMON 3 7 4 12 3 0
+            LEMON 12 2 4 12 1 8
+            LEMON 13 1 4 12 0 4
+            LEMON 14 1 4 12 1 7
+            PLUM 15 2 4 12 0 3
+            LEMON 14 3 3 10 0 5
+            LEMON 12 3 2 8 0 1
+            3
+            0 0 6 6 1 1 1 1 0 0 0 0 0 0
+            1 1 14 2 1 1 1 1 0 0 0 0 0 0
+            2 1 15 4 2 2 1 1 0 2 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to just continue harvesting lemons for a better chopper" do
+          is_expected.to eq("MSG trns till LEMON 4; MOVE 0 5 6")
+          expect(controller.send(:turns_to_gather, "LEMON", 7)).to eq(42)
         end
       end
     end

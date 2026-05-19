@@ -332,7 +332,7 @@ class Controller
 
     if turn <= 1
       # in how many turns is it OK to scale straight to chopper. Can probably go lower than 70, maybe 50.
-      if turns_till_chopper > 70
+      if turns_till_chopper > 65
         potential_worker = my_inventory.best_intermediate_worker(my_workers.size)
         if potential_worker
           @training = "TRAIN #{potential_worker}"
@@ -1089,22 +1089,18 @@ class Controller
         penalty_turns = nil
         yields = []
 
-        harvesters = ms(">>>> harvester lookup") do
+        harvesters = xms(">>>> harvester lookup") do
           my_workers.select(&:can_harvest?).sort_by { [-_1.move_speed, -_1.carry_capacity, -_1.chop_power] }
         end
 
         harvesters.each_with_index do |worker, i|
-          best_tree, average_yield = ms(">>>> best_tree, average_yield lookup") do
+          best_tree, average_yield = xms(">>>> best_tree, average_yield lookup") do
             trees.select { _1.type?(type) }.map do |tree|
-              camp_to_tree_path =  ms(">>>> camp->tree path") do
-                shortest_path(my_camp.node, tree.node)
-              end
-              distance_to_camp = ms(">>>> camp->tree path size") do
-                camp_to_tree_path.size - 1
-              end
-
+              camp_to_tree_path = shortest_path(my_camp.node, tree.node)
+              distance_to_camp = camp_to_tree_path.size - 1
               [tree, tree.average_fruit_yield(distance_to_camp, worker)]
-            end[i..-1]&.first
+            end
+            .sort_by { |t, average_yield| -average_yield }[i..-1]&.first
           end
 
           if best_tree
@@ -1238,10 +1234,10 @@ class Controller
 
     if chopper.nil?
       variants = [
-        [2, 3, 0, 2], # (-1carry,-1chop)
-        [2, 3, 0, 3], # (-1carry)
+        [2, 4, 0, 3], # best
         [2, 4, 0, 2], # -1chop
-        [2, 4, 0, 3]  # best
+        [2, 3, 0, 3], # (-1carry)
+        [2, 3, 0, 2], # (-1carry,-1chop)
       ]
 
       variants.each do |variant|
@@ -1249,7 +1245,7 @@ class Controller
         @predictions << p
 
         # no need to calc all four variants if the cheapest will take 100 turns
-        break if p.turns > 100
+        # break if p.turns > 100
       end
     end
 
