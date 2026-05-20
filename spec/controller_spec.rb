@@ -1068,7 +1068,8 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for inter to get iron (hard left) and helper to pick up a lemon to plant" do
-          is_expected.to eq("MSG IROON!; PICK 1 LEMON; MOVE 2 11 1")
+          # is_expected.to eq("MSG IROON!; PICK 1 LEMON; MOVE 2 11 1")
+          is_expected.to eq("MSG trns till LEMON 3; PICK 1 LEMON; MOVE 2 11 1")
         end
       end
 
@@ -2360,8 +2361,64 @@ RSpec.describe Controller, instance_name: :controller do
           INPUT
         end
 
-        xit "returns a command for inter to go grab lemons" do
-          is_expected.to eq("DROP 1; MOVE 2 12 5")
+        it "returns a command for inter to go grab lemons" do
+          is_expected.to eq("MSG trns till LEMON 3; DROP 1; MOVE 2 12 5")
+          expect(controller.send(:seed_node)).to eq("10 3") # secluded 12 1 may be way better
+        end
+      end
+
+      context "when helper has bananafruit all around" do
+        let(:turn) { 78 }
+        let(:input) do
+          <<~INPUT
+            0 1 6 5 1 0
+            0 10 5 6 3 0
+            33
+            PLUM 14 0 4 12 3 0
+            PLUM 1 7 4 12 3 0
+            PLUM 14 2 4 12 3 0
+            PLUM 1 5 4 12 3 6
+            PLUM 1 0 4 12 3 0
+            PLUM 14 7 4 12 3 0
+            LEMON 12 3 4 12 3 8
+            LEMON 3 4 4 12 1 8
+            APPLE 11 6 4 20 3 8
+            APPLE 4 1 4 20 3 0
+            APPLE 2 1 4 20 3 0
+            APPLE 13 6 4 20 3 0
+            BANANA 0 5 4 6 3 0
+            BANANA 15 2 4 6 3 0
+            BANANA 9 3 4 6 3 0
+            BANANA 6 4 4 6 3 0
+            BANANA 9 5 4 6 3 0
+            BANANA 6 2 4 6 3 0
+            LEMON 10 3 4 12 3 0
+            LEMON 3 3 4 12 0 7
+            PLUM 10 4 4 12 0 1
+            LEMON 3 5 4 12 1 5
+            LEMON 4 5 4 12 3 0
+            LEMON 3 6 4 12 3 0
+            LEMON 2 3 4 12 1 6
+            PLUM 2 4 4 12 1 8
+            PLUM 2 2 4 12 0 2
+            PLUM 1 4 4 12 0 4
+            LEMON 4 2 4 12 0 6
+            PLUM 1 3 3 10 0 4
+            PLUM 0 3 3 10 0 6
+            LEMON 3 2 2 8 0 8
+            BANANA 9 4 1 3 0 6
+            5
+            0 1 3 3 1 1 1 1 0 1 0 0 0 0
+            1 0 9 4 1 1 1 1 0 0 0 0 0 0
+            2 0 11 5 1 1 1 1 0 0 1 0 0 0
+            3 1 1 5 2 2 2 2 0 0 0 0 0 0
+            4 0 10 3 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for helper to go to 9 3 to grab bananas from tree, not storage" do
+          is_expected.to eq("CHOP 4; MOVE 1 9 3; DROP 2")
+          # expect(controller.send(:seed_node)).to eq("10 3") # secluded 12 1 may be way better
         end
       end
     end

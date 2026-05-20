@@ -606,7 +606,7 @@ class Controller
     #  2. 10 iron
     #  3. 5 plums (easy)
     if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
-      debug("= Helper will help scale to chopper")
+      debug("- helper will help scale to chopper")
 
       seek_to_plant_carried_banana(worker) ||
         (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
@@ -663,7 +663,15 @@ class Controller
         return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
       end
 
-      # otherwise worker is not carrying anything
+      # Worker is not carrying anything now
+
+      # 1. prefer going towards a banana fruit
+      nearby_banana = grid.neighbors(worker.node)
+        .select { cells[_1]&.tree&.type?("BANANA") && cells[_1]&.tree&.turns_till_fruit <= 1 }
+        .quick_min_by { shortest_path(seed_node, _1) }
+      return go_and_harvest(worker, nearby_banana) if nearby_banana
+
+      # 2. or just step out of the way
       nearby_tree_node = grid.neighbors(worker.node)
         .select { cells[_1]&.tree }
         .quick_min_by { cells[_1].tree.turns_till_size(4) }
@@ -750,13 +758,13 @@ class Controller
           (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
           (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 2)) ||
           (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 2)) ||
+          (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 3)) ||
+          (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 3)) ||
           (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
           (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) ||
           debug("= Huh? inter has nothing to do for scaling to chopper!")
           # (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
           # (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
-
-        # binding.pry
       end
       return if plans[worker.id]
     end
@@ -879,19 +887,6 @@ class Controller
     return if plans[worker.id]
 
     # not carrying a banana, should get one
-
-    # 1. yay, on a banana already!
-    if (tree = cells[worker.node]&.tree) && tree.type?("BANANA") && tree.fruit?
-      return go_and_harvest(worker, tree.node)
-    end
-
-    # 2. maybe a banana in neighbor cells
-    nearby_banana = grid.neighbors(worker.node)
-      .select { cells[_1]&.tree&.type?("BANANA") && cells[_1]&.tree&.turns_till_fruit <= 1 }
-      .quick_min_by { shortest_path(seed_node, _1) }
-    return go_and_harvest(worker, nearby_banana) if nearby_banana
-
-    # 3. maybe I have a seeding banana
     seeding_bananas =
       cells[seed_node]&.tree&.type?("BANANA") &&
       cells[seed_node]&.tree&.turns_till_fruit_in_hand(worker, shortest_path(worker.node, seed_node)) < 5
@@ -1109,7 +1104,6 @@ class Controller
     if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
       plans[worker.id] = Plan.new("HARVEST", worker.id)
     else # gotta detect and go to a good candidate tree
-      # binding.pry if fruit_type == "LEMON"
       path_to_tree, turns_till = nodes_within_3_of_camp
         .select do |node|
           next false unless (tree = cells[node]&.tree&.type?(fruit_type))
@@ -1125,8 +1119,10 @@ class Controller
         end
         .map do |node|
           path = shortest_path(worker.node, node)
-          [path, cells[node].tree.turns_till_fruit_in_hand(worker, path)]
-        end.select { _2 <= max_wait }.min_by { |_path, turns_till| turns_till }
+          [path, cells[node].tree.turns_till_fruit]
+        end
+        .select { _2 <= max_wait }
+        .sort_by { |path, turns_till| [path.size, turns_till] }.first
 
       if path_to_tree.nil?
         debug("= No #{fruit_type} trees qualify for early harvesting with a wait time of #{max_wait}")
