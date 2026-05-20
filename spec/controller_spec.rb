@@ -2310,6 +2310,62 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          #......~~~#~....
+          ##...#.~~~~~..+.
+          .....+..#~~..#..
+          ....1......#....
+          ....#......0....
+          ..#..~~#..+.....
+          .+..~~~~~.#...##
+          ....~#~~~......#
+        FIELD
+      end
+
+      context "when inter can go grab moar lemons" do
+        let(:turn) { 22 }
+        let(:input) do
+          <<~INPUT
+            1 3 8 6 11 0
+            5 3 10 6 8 0
+            22
+            PLUM 14 0 4 12 1 6
+            PLUM 1 7 4 12 1 6
+            PLUM 14 2 4 12 3 0
+            PLUM 1 5 4 12 3 0
+            PLUM 1 0 4 12 3 0
+            PLUM 14 7 4 12 3 0
+            LEMON 12 3 4 12 2 8
+            LEMON 3 4 4 12 1 8
+            APPLE 11 6 4 20 3 1
+            APPLE 4 1 4 20 3 1
+            APPLE 2 1 4 20 0 2
+            APPLE 13 6 4 20 0 2
+            BANANA 0 5 4 6 3 0
+            BANANA 15 2 4 6 3 0
+            BANANA 9 3 4 6 2 2
+            BANANA 6 4 4 6 2 2
+            BANANA 9 5 4 6 2 4
+            BANANA 6 2 4 6 2 4
+            LEMON 10 3 4 12 1 3
+            LEMON 3 3 3 10 0 7
+            PLUM 10 4 2 8 0 1
+            LEMON 3 5 2 8 0 3
+            3
+            0 1 3 5 1 1 1 1 0 1 0 0 0 0
+            1 0 10 4 1 1 1 1 0 1 0 0 0 0
+            2 0 11 5 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        xit "returns a command for inter to go grab lemons" do
+          is_expected.to eq("DROP 1; MOVE 2 12 5")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

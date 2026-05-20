@@ -87,7 +87,7 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
   # lower is better. Ideally 0 - if the worker is already there. Can be negative is several fruits
   #
   # @return Numeric
-  def turns_till_fruit(worker, path_to)
+  def turns_till_fruit_in_hand(worker, path_to)
     distance_penalty = ((path_to.size - 1) / worker.move_speed.to_f).ceil
     return distance_penalty if fruits.positive?
 
@@ -753,6 +753,8 @@ class Controller
           debug("= Huh? inter has nothing to do for scaling to chopper!")
           # (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
           # (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
+
+        # binding.pry
       end
       return if plans[worker.id]
     end
@@ -876,7 +878,7 @@ class Controller
     # not carrying a banana, should get one
     seeding_bananas =
       cells[seed_node]&.tree&.type?("BANANA") &&
-      cells[seed_node]&.tree&.turns_till_fruit(worker, shortest_path(worker.node, seed_node)) < 5
+      cells[seed_node]&.tree&.turns_till_fruit_in_hand(worker, shortest_path(worker.node, seed_node)) < 5
 
     if (tree = cells[worker.node]&.tree) && tree.type?("BANANA") && tree.fruit? # ON banana
       go_and_harvest(worker, tree.node)
@@ -886,7 +888,7 @@ class Controller
       return go_and_pick(worker, closest_dropoff(worker.node), "BANANA")
     elsif (banana_nodes = cells.select { |node, cell| cell&.tree&.type?("BANANA") }).any?
       closest, _cell = banana_nodes.min_by do |node, cell|
-        cell.tree.turns_till_fruit(worker, shortest_path(worker.node, node))
+        cell.tree.turns_till_fruit_in_hand(worker, shortest_path(worker.node, node))
       end
 
       if closest
@@ -1067,7 +1069,7 @@ class Controller
       return go_and_plant(worker, node, fruit_type)
     else
       closest_fruit = trees.select { _1.type?(fruit_type) }
-        .min_by { _1.turns_till_fruit(worker, shortest_path(worker.node, _1.node)) }
+        .min_by { _1.turns_till_fruit_in_hand(worker, shortest_path(worker.node, _1.node)) }
 
       unless closest_fruit
         debug("= Wow, I have no #{fruit_type} at camp and no trees on map")
@@ -1082,7 +1084,7 @@ class Controller
   end
 
   # Used by both helper and inter, helper gets prio
-  #
+  # Contrast with #gather_anywhere_fruit
   def gather_initial_fruit(worker, fruit_type, max_wait)
     if worker.full?
       return go_and_drop(worker, closest_dropoff(worker.node))
@@ -1091,21 +1093,24 @@ class Controller
     if cells[worker.node]&.tree&.type == fruit_type && cells[worker.node]&.tree&.fruit? # at a tree already!
       plans[worker.id] = Plan.new("HARVEST", worker.id)
     else # gotta detect and go to a good candidate tree
+      # binding.pry if fruit_type == "LEMON"
       path_to_tree, turns_till = nodes_within_3_of_camp
         .select do |node|
-          next false unless (tree = cells[node]&.tree)
-          next false unless tree.type?(fruit_type)
+          next false unless (tree = cells[node]&.tree&.type?(fruit_type))
 
+          # seeking to disqualify trees worked on by helper
           plan = plans[helper.id]
           next true unless plan
 
-          !(plan.name?("HARVEST") && helper.node == node)
+          next false if plan.name?("HARVEST") && helper.node == node
+          next false if plan.name?("MOVE") && plan.node == node
+
+          true
         end
         .map do |node|
           path = shortest_path(worker.node, node)
-          [path, cells[node].tree.turns_till_fruit(worker, path)]
+          [path, cells[node].tree.turns_till_fruit_in_hand(worker, path)]
         end.select { _2 <= max_wait }.min_by { |_path, turns_till| turns_till }
-
 
       if path_to_tree.nil?
         debug("= No #{fruit_type} trees qualify for early harvesting with a wait time of #{max_wait}")
@@ -1131,7 +1136,7 @@ class Controller
       .select { _1.type?(fruit_type) && !(plans[helper.id]&.name?("HARVEST") && helper.node == _1.node) }
       .map do |tree|
         path = shortest_path(worker.node, tree.node)
-        [path, tree.turns_till_fruit(worker, path)]
+        [path, tree.turns_till_fruit_in_hand(worker, path)]
       end
       .select { _2 <= max_wait }.min_by { |_path, turns_till| turns_till }
 
@@ -1329,11 +1334,11 @@ class Controller
     return @turns_till_own_lemon_tree[turn] if @turns_till_own_lemon_tree.key?(turn)
 
     nearby_lemon = trees_within_3_of_camp.select { _1.type?("LEMON") }
-      .min_by { _1.turns_till_fruit(helper, shortest_path(helper.node, _1.node)) }
+      .min_by { _1.turns_till_fruit_in_hand(helper, shortest_path(helper.node, _1.node)) }
 
     if nearby_lemon
       return @turns_till_own_lemon_tree[turn] =
-        nearby_lemon.turns_till_fruit(helper, shortest_path(helper.node, nearby_lemon.node))
+        nearby_lemon.turns_till_fruit_in_hand(helper, shortest_path(helper.node, nearby_lemon.node))
     end
 
     # ok, maybe I can plant
@@ -1342,13 +1347,13 @@ class Controller
         example_node = wet_nodes_within_3_of_camp.first
         cd_and_period = tree_period_mapping.dig(:wet, "LEMON")
         return @turns_till_own_lemon_tree[turn] = Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
-          .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+          .turns_till_fruit_in_hand(helper, shortest_path(helper.node, example_node))
         # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
       else
         example_node = dropoff_nodes.first
         cd_and_period = tree_period_mapping.dig(:dry, "LEMON")
         return @turns_till_own_lemon_tree[turn] = Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
-          .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+          .turns_till_fruit_in_hand(helper, shortest_path(helper.node, example_node))
         # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
       end
     end
@@ -1359,20 +1364,20 @@ class Controller
       .map do |tree|
         [
           tree,
-          tree.turns_till_fruit(helper, shortest_path(helper.node, tree.node)),
+          tree.turns_till_fruit_in_hand(helper, shortest_path(helper.node, tree.node)),
           _get_back_turns = shortest_path(tree.node, my_camp.node).size - 2,
           _new_growth =
             if wet_nodes_within_3_of_camp.any?
               example_node = wet_nodes_within_3_of_camp.first
               cd_and_period = tree_period_mapping.dig(:wet, "LEMON")
               Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
-                .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+                .turns_till_fruit_in_hand(helper, shortest_path(helper.node, example_node))
               # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
             else
               example_node = dropoff_nodes.first
               cd_and_period = tree_period_mapping.dig(:dry, "LEMON")
               Tree.new("LEMON", example_node.x, example_node.y, 1, 8, 0, cd_and_period, cd_and_period)
-                .turns_till_fruit(helper, shortest_path(helper.node, example_node))
+                .turns_till_fruit_in_hand(helper, shortest_path(helper.node, example_node))
               # :type, :x, :y, :size, :health, :fruits, :cooldown, :period
             end
         ]
