@@ -767,7 +767,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "returns a command for chopper to beeline to closest grown tree" do
-        is_expected.to start_with("MSG beeline; MOVE 4 8 7; MOVE 0")
+        is_expected.to start_with("MSG beeline 6 6; MOVE 4 8 7; MOVE 0")
       end
 
       context "when chopper outside base cells and near a choppable tree" do
@@ -838,7 +838,7 @@ RSpec.describe Controller, instance_name: :controller do
         INPUT
 
         it "returns a command to go cut outside base, not seed banana" do
-          is_expected.to start_with("MSG beeline; MOVE 4 8 7; ") # or 7 6
+          is_expected.to start_with("MSG beeline 6 6; MOVE 4 8 7; ") # or 7 6
         end
       end
 
@@ -2180,7 +2180,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for chopper to harass enemy camp while inter and helper self-plant" do
-          is_expected.to eq("MSG slim pickings; MOVE 5 9 2; PLANT 1 PLUM; PICK 3 PLUM")
+          is_expected.to eq("MSG beeline 8 1; MOVE 5 9 2; PLANT 1 PLUM; PICK 3 PLUM")
         end
       end
 
@@ -2419,6 +2419,111 @@ RSpec.describe Controller, instance_name: :controller do
         it "returns a command for helper to go to 9 3 to grab bananas from tree, not storage" do
           is_expected.to eq("CHOP 4; MOVE 1 9 3; DROP 2")
           # expect(controller.send(:seed_node)).to eq("10 3") # secluded 12 1 may be way better
+        end
+      end
+
+      context "when banana planting has stalled a bit and best option is to skip outside home to chop a further banana" do
+        let(:turn) { 104 }
+        let(:input) do
+          <<~INPUT
+            0 1 12 3 1 20
+            8 16 5 6 3 0
+            32
+            PLUM 14 0 4 12 3 0
+            PLUM 1 7 4 12 3 0
+            PLUM 14 2 4 12 3 0
+            PLUM 1 5 4 12 3 2
+            PLUM 1 0 4 12 3 0
+            PLUM 14 7 4 12 3 0
+            LEMON 12 3 4 12 3 7
+            LEMON 3 4 4 12 3 6
+            APPLE 11 6 4 20 1 9
+            APPLE 4 1 4 20 3 0
+            APPLE 2 1 4 20 3 0
+            APPLE 13 6 4 20 3 0
+            BANANA 0 5 4 6 3 0
+            BANANA 15 2 4 6 3 0
+            BANANA 6 4 4 6 3 0
+            BANANA 6 2 4 6 3 0
+            LEMON 3 3 4 12 1 5
+            LEMON 3 5 4 12 3 0
+            LEMON 4 5 4 12 3 0
+            LEMON 3 6 4 12 3 0
+            LEMON 2 3 4 12 3 4
+            PLUM 1 3 4 12 2 6
+            PLUM 2 2 4 12 1 8
+            PLUM 1 4 4 12 1 2
+            LEMON 4 2 4 12 1 4
+            LEMON 2 4 4 12 3 7
+            LEMON 3 2 4 12 2 1
+            LEMON 0 3 4 12 1 4
+            BANANA 10 3 4 6 0 2
+            PLUM 1 2 3 10 0 7
+            BANANA 9 3 1 3 0 2
+            BANANA 9 4 1 3 0 3
+            5
+            0 1 4 2 1 1 1 1 0 0 0 0 1 0
+            1 0 10 3 1 1 1 1 0 0 0 1 0 0
+            2 0 12 4 1 1 1 1 0 1 0 0 0 0
+            3 1 3 3 2 2 2 2 0 0 0 0 0 0
+            4 0 10 4 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for chopper to go to 8 4 (targeting 6 4 banana)" do
+          is_expected.to eq("MSG beeline 6 4; MOVE 4 8 4; MOVE 1 10 4; DROP 2")
+          # 200ms init before edge-cells
+        end
+      end
+    end
+
+    context "with seed=6868214163652293000 | open field without water and opp quite close :/" do
+      let(:field) do
+        <<~FIELD
+          ......+........~....
+          .~.............~....
+          ~~........0....~...~
+          ~~................+~
+          ~~.............#..#~
+          ~#..#.............~~
+          ~+................~~
+          ~...~....1........~~
+          ....~.............~.
+          ....~........+......
+        FIELD
+      end
+
+      context "when helper just harvested a plum" do
+        let(:turn) { 28 }
+        let(:input) do
+          <<~INPUT
+            2 11 10 9 10 1
+            0 0 0 9 0 7
+            15
+            PLUM 13 6 4 12 3 0
+            PLUM 6 3 4 12 3 0
+            PLUM 9 1 4 12 1 7
+            LEMON 3 6 4 12 1 3
+            LEMON 16 3 4 12 1 3
+            LEMON 5 5 4 12 3 0
+            LEMON 14 4 4 12 3 0
+            APPLE 11 5 4 20 0 8
+            APPLE 17 8 4 20 3 0
+            APPLE 2 1 4 20 3 0
+            BANANA 19 0 4 6 3 0
+            BANANA 0 9 4 6 3 0
+            BANANA 15 9 4 6 3 0
+            BANANA 4 0 4 6 3 0
+            LEMON 10 1 1 6 0 5
+            3
+            0 1 8 3 1 1 1 1 0 0 0 0 0 0
+            1 0 9 2 1 1 1 1 1 0 0 0 0 0
+            2 1 9 4 1 3 3 3 0 0 0 0 0 3
+          INPUT
+        end
+
+        it "returns a command to drop the plum, cmon!! " do
+          is_expected.to eq("DROP 1")
         end
       end
     end

@@ -520,15 +520,37 @@ class Controller
       return go_and_chop(worker, closest)
     end
 
-    grown = nodes_within_3_of_camp_except_seed
-      .select { cells[_1]&.tree && cells[_1].tree.grown? }
+    ms(">> best choppable tree beyond home turf") do
+      tree_count = trees.size
+      choping_candidates = trees.reject { (_1.node == seed_node && _1.type?("BANANA")) }
+        .sort_by { grid.manhattan_distance(worker.node, _1.node) }.first((tree_count / 2) + 1)
 
-    if grown.any?
-      closest = grown.min_by { shortest_path(worker.node, _1).size }
-      return go_and_chop(worker, closest)
+      choping_candidates = choping_candidates.map { [_1, tree_points_per_turn(_1, worker)] }
+        .sort_by { |t, p| -p }.first(3)
+
+      choping_candidates = choping_candidates.map do |t, p|
+        [t, p, shortest_path(t.node, my_camp.node).size]
+      end.sort_by { |t, p, home| [-p, home] }.first(3)
+
+      best_choppable = choping_candidates.map do |t, p, home|
+        [t, p, home, shortest_path(t.node, opp_camp.node).size]
+      end.sort_by { |t, p, home, o| [-p, home, -o] }.first&.first
+
+      if best_choppable
+        messages << "beeline #{best_choppable.node}"
+        return go_and_chop(worker, best_choppable.node)
+      end
     end
 
-    debug("= Hmm, no choppable trees, guess lets go to soonest choppable")
+    # grown = nodes_within_3_of_camp_except_seed
+    #   .select { cells[_1]&.tree && cells[_1].tree.grown? }
+
+    # if grown.any?
+    #   closest = grown.min_by { shortest_path(worker.node, _1).size }
+    #   return go_and_chop(worker, closest)
+    # end
+
+    # debug("= Hmm, no choppable trees, guess lets go to soonest choppable")
 
     growing = nodes_within_3_of_camp_except_seed
       .select { cells[_1]&.tree && cells[_1].tree.turns_till_size(4) <= 2 }
@@ -1199,7 +1221,7 @@ class Controller
         path = shortest_path(worker.node, opp_worker.node)
         turns_to_reach =
           ((path.size - 1) / worker.move_speed.to_f).ceil +
-          (turns_to_drop(worker) * 2) # doubling to account for possible going opposite way. Usually will be 0 anyway
+          (turns_to_empty(worker) * 2) # doubling to account for possible going opposite way. Usually will be 0 anyway
 
         turns_to_fell = tree.chop_turns(opp_worker.chop_power)
         [path, turns_to_reach, turns_to_fell]
@@ -1289,7 +1311,25 @@ class Controller
     end
   end
 
-  def turns_to_drop(worker)
+  # This entails the full cycle of getting to, chopping and getting back to drop
+  def tree_points_per_turn(tree, worker)
+    turns_to_reach = ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
+
+    copy = tree.dup
+    turns_to_reach.times { copy.apply_turn }
+
+    # TODO, this will slightly undervalue the tree if it's still growing and would grow during chop
+    turns_to_chop = copy.chop_turns(worker.chop_power)
+    turns_to_drop = turns_to_drop(tree.node, worker)
+
+    (tree.size * 4) / (turns_to_reach + turns_to_chop + turns_to_drop).to_f
+  end
+
+  def turns_to_drop(from_node, worker)
+    ((shortest_path_to_drop(from_node).size - 1) / worker.move_speed.to_f).ceil + 1
+  end
+
+  def turns_to_empty(worker)
     return 0 unless worker.full?
 
     ((shortest_path_to_drop(worker.node).size - 1) / worker.move_speed.to_f).ceil + 1
