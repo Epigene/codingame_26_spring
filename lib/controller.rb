@@ -522,7 +522,8 @@ class Controller
 
     ms(">> best choppable tree beyond home turf") do
       tree_count = trees.size
-      choping_candidates = trees.reject { (_1.node == seed_node && _1.type?("BANANA")) }
+      # TODO, could apply this to size 3 cd 1 trees also
+      choping_candidates = trees.select(&:grown?).reject { (_1.node == seed_node && _1.type?("BANANA")) }
         .sort_by { grid.manhattan_distance(worker.node, _1.node) }.first((tree_count / 2) + 1)
 
       choping_candidates = choping_candidates.map { [_1, tree_points_per_turn(_1, worker)] }
@@ -542,15 +543,15 @@ class Controller
       end
     end
 
-    # grown = nodes_within_3_of_camp_except_seed
-    #   .select { cells[_1]&.tree && cells[_1].tree.grown? }
+    grown = nodes_within_3_of_camp_except_seed
+      .select { cells[_1]&.tree && cells[_1].tree.grown? }
 
-    # if grown.any?
-    #   closest = grown.min_by { shortest_path(worker.node, _1).size }
-    #   return go_and_chop(worker, closest)
-    # end
+    if grown.any?
+      closest = grown.min_by { shortest_path(worker.node, _1).size }
+      return go_and_chop(worker, closest)
+    end
 
-    # debug("= Hmm, no choppable trees, guess lets go to soonest choppable")
+    debug("= Hmm, no choppable trees, guess lets go to soonest choppable")
 
     growing = nodes_within_3_of_camp_except_seed
       .select { cells[_1]&.tree && cells[_1].tree.turns_till_size(4) <= 2 }
@@ -628,17 +629,30 @@ class Controller
     #  2. 10 iron
     #  3. 5 plums (easy)
     if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
-      debug("- helper will help scale to chopper")
+      debug("- helper will help scale to chopper #{best_prediction.name}")
 
-      seek_to_plant_carried_banana(worker) ||
-        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
-        (my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
+      seek_to_plant_carried_banana(worker) || (
+        (!worker.full? || worker.carrying?("LEMON")) &&
+          my_inventory.lemon < aimed_chopper_cost["LEMON"] &&
+          ensure_sufficient_lemon_growth(worker)
+      ) || (
+        (!worker.full? || worker.carrying?("PLUM")) &&
+          my_inventory.plum < aimed_chopper_cost["PLUM"] &&
+          ensure_sufficient_plum_growth(worker)
+      ) ||
         harvest_already_stood_on_tree(
           worker,
-          *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
+          *[
+            (my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil),
+            (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)
+          ].compact
         ) ||
         (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
         (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
+        ## outside fruit
+        ((diff = aimed_chopper_cost["LEMON"] - my_inventory.lemon) < 5 && diff.positive? && gather_anywhere_fruit(worker, "LEMON", 5)) ||
+        ((diff = aimed_chopper_cost["PLUM"] - my_inventory.plum) < 5 && diff.positive? && gather_anywhere_fruit(worker, "PLUM", 5)) ||
+        ##
         (my_inventory.iron < aimed_chopper_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
         (
           my_inventory.lemon >= aimed_chopper_cost["LEMON"] && my_inventory.plum >= aimed_chopper_cost["PLUM"] &&
@@ -1538,6 +1552,18 @@ class Controller
       # break if p.turns > 100
     end
 
+    # detect if opp jumped the gun and got an early chopper
+    if my_workers.size < workers.select { !_1.my? }.size
+      if opp_inventory.plum < 3 && opp_inventory.lemon < 3 && opp_inventory.iron < 3
+        if workers.select { !_1.my? }.find { _1.carry_capacity > 1 && _1.chop_power > 1 }
+          best_next_chopper = predictions.sort_by { [_1.turns, -_1.grand_total] }.first
+          debug("XX Opp early chopper detected, seeking to quick-scale to #{best_next_chopper.name}")
+
+          @best_prediction = best_next_chopper
+        end
+      end
+    end
+
     @best_prediction ||= @predictions.sort_by { [-_1.grand_total, _1.turns] }.first
 
     nil
@@ -1595,6 +1621,10 @@ class Controller
 
     ms(">> #my_nodes init") do
       grass_nodes.each do |grass_node|
+        # optimization, don't care about nodes more than 8mh from my cmp
+        mh = grid.manhattan_distance(my_camp.node, grass_node)
+        next if mh > 8
+
         my_path = shortest_path(my_camp.node, grass_node).size - 1
         opp_path = shortest_path(opp_camp.node, grass_node).size - 1
 
