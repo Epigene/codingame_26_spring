@@ -394,8 +394,11 @@ class Controller
     ms("> helper plan calc") do
       organize_helper(helper) # helper is calculated before inter because inter will be able to work around helper
     end
-    ms("> inter plan calc") do
-      organize_intermediate(inter) if inter
+
+    if inter
+      ms("> inter plan calc") do
+        organize_intermediate(inter)
+      end
     end
 
     result = [
