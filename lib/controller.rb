@@ -437,7 +437,7 @@ class Controller
 
   # @return Prediction
   def predict(move, carry, harvest, chop)
-    ms("== #{move} #{carry} #{harvest} #{chop} chopper") do
+    xms("== #{move} #{carry} #{harvest} #{chop} chopper") do
       costs = worker_cost(move, carry, harvest, chop)
 
       turns =
