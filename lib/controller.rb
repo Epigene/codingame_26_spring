@@ -298,7 +298,7 @@ Prediction = Struct.new(:move, :carry, :harvest, :chop, :costs, :turns, :remaini
 
   # key value, tells plan's worth.
   def grand_total
-    chop_points - cost
+    chop_points - cost - ((turns**1.5) * 0.02)
   end
 
   def cost
@@ -605,12 +605,12 @@ class Controller
     #  1. Reach 17 lemons
     #  2. 10 iron
     #  3. 5 plums (easy)
-    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
       debug("= Helper will help scale to chopper")
 
       seek_to_plant_carried_banana(worker) ||
-        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
-        (my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
+        ((!worker.full? || worker.carrying?("LEMON")) && my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
+        ((!worker.full? || worker.carrying?("PLUM")) && my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
         harvest_already_stood_on_tree(
           worker,
           *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
@@ -663,7 +663,15 @@ class Controller
         return go_and_chop(worker, nearby_tree_node) if nearby_tree_node
       end
 
-      # otherwise worker is not carrying anything
+      # Worker is not carrying anything now
+
+      # 1. prefer going towards a banana fruit
+      nearby_banana = grid.neighbors(worker.node)
+        .select { cells[_1]&.tree&.type?("BANANA") && cells[_1]&.tree&.turns_till_fruit <= 1 }
+        .quick_min_by { shortest_path(seed_node, _1) }
+      return go_and_harvest(worker, nearby_banana) if nearby_banana
+
+      # 2. or just step out of the way
       nearby_tree_node = grid.neighbors(worker.node)
         .select { cells[_1]&.tree }
         .quick_min_by { cells[_1].tree.turns_till_size(4) }
@@ -733,7 +741,7 @@ class Controller
     end
 
     xms("> inter chopper scaling") do
-      if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+      if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
         debug("- inter helping scale to chopper")
 
         (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
@@ -746,17 +754,20 @@ class Controller
           (my_inventory.plum < 6 && gather_initial_fruit(worker, "PLUM", 1)) ||
           (my_inventory.lemon < 6 && gather_initial_fruit(worker, "LEMON", 2)) ||
           (my_inventory.plum < 6 && gather_initial_fruit(worker, "PLUM", 2)) ||
+          (my_inventory.apple < 3 && gather_initial_fruit(worker, "APPLE", 1)) ||
           (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
           (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
           (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 2)) ||
           (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 2)) ||
-          (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
+          (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 1)) ||
+          (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 3)) ||
+          (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 3)) ||
+          (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 3)) ||
           (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) ||
           debug("= Huh? inter has nothing to do for scaling to chopper!")
           # (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
           # (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 20))
 
-        # binding.pry
       end
       return if plans[worker.id]
     end
@@ -1291,6 +1302,20 @@ class Controller
         (count / yields.sum.to_f).ceil + penalty_turns.to_i
       end
     end
+  end
+
+  # BE CAREFUL, this is too greedy when applied to home trees, it comes out as chopping ungrown trees is best
+  def tree_points_per_turn(tree, worker)
+    turns_to_reach = ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
+
+    copy = tree.dup
+    turns_to_reach.times { copy.apply_turn }
+
+    # TODO, this will slightly undervalue the tree if it's still growing and would grow during chop
+    turns_to_chop = copy.chop_turns(worker.chop_power)
+    turns_to_drop = turns_to_drop(tree.node, worker)
+
+    (tree.size * 4) / (turns_to_reach + turns_to_chop + turns_to_drop).to_f
   end
 
   def turns_to_drop(worker)
