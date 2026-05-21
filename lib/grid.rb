@@ -199,9 +199,7 @@ class Grid
 
   # @return Integer
   def manhattan_distance(nodeA, nodeB)
-    @manhattan_distances ||= {}
-    key = "#{nodeA}_#{nodeB}"
-    @manhattan_distances[key] ||= (nodeA.x - nodeB.x).abs + (nodeA.y - nodeB.y).abs
+    (nodeA.x - nodeB.x).abs + (nodeA.y - nodeB.y).abs
   end
 
   def manhattan_distance_from_mid(node)
