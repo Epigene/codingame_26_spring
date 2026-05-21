@@ -739,7 +739,7 @@ class Controller
 
     xms("> inter chopper scaling") do
       if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
-        debug("== inter helping scale to chopper")
+        debug("- inter helping scale to chopper")
 
         (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
           (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
