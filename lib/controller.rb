@@ -1272,6 +1272,20 @@ class Controller
     end
   end
 
+  # BE CAREFUL, this is too greedy when applied to home trees, it comes out as chopping ungrown trees is best
+  def tree_points_per_turn(tree, worker)
+    turns_to_reach = ((shortest_path(worker.node, tree.node).size - 1) / worker.move_speed.to_f).ceil
+
+    copy = tree.dup
+    turns_to_reach.times { copy.apply_turn }
+
+    # TODO, this will slightly undervalue the tree if it's still growing and would grow during chop
+    turns_to_chop = copy.chop_turns(worker.chop_power)
+    turns_to_drop = turns_to_drop(tree.node, worker)
+
+    (tree.size * 4) / (turns_to_reach + turns_to_chop + turns_to_drop).to_f
+  end
+
   def turns_to_drop(worker)
     return 0 unless worker.full?
 
