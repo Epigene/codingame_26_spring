@@ -607,7 +607,7 @@ class Controller
     #  2. 10 iron
     #  3. 5 plums (easy)
     if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
-      debug("= Helper will help scale to chopper")
+      debug("- Helper will help scale to chopper")
 
       seek_to_plant_carried_banana(worker) ||
         (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
