@@ -84,6 +84,13 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
     size == 4
   end
 
+  # How many turns till tree will have at least 1 harvestable fruit
+  def turns_till_fruit
+    return 0 if fruit?
+
+    (4 - size) * period + cooldown
+  end
+
   # lower is better. Ideally 0 - if the worker is already there. Can be negative is several fruits
   #
   # @return Numeric
