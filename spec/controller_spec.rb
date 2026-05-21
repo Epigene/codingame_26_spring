@@ -74,8 +74,8 @@ RSpec.describe Tree, instance_name: :tree do
     end
   end
 
-  describe "#choppable_for_full_yield(chop_power)" do
-    subject(:choppable_for_full_yield) { tree.choppable_for_full_yield(chop_power) }
+  describe "#choppable_for_full_yield?(chop_power)" do
+    subject(:choppable_for_full_yield?) { tree.choppable_for_full_yield?(chop_power) }
 
     let(:chop_power) { 3 }
 

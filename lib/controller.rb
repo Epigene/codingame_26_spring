@@ -65,8 +65,8 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
   end
 
   # A bit more flexible than #grown? because takes into account time to chop+growth
-  def choppable_for_full_yield(chop_power)
-    raise("#choppable_for_full_yield called for non-chopping worker, debug!") if chop_power.zero?
+  def choppable_for_full_yield?(chop_power)
+    raise("#choppable_for_full_yield? called for non-chopping worker, debug!") if chop_power.zero?
 
     return true if grown?
 
@@ -456,11 +456,6 @@ class Controller
     end
   end
 
-  # relies on @best_prediction having been set
-  def aimed_chopper_cost
-    best_prediction.costs
-  end
-
   def organize_chopping(worker)
     # 0. unload if carrying wood for some reason
     if (trees.any?(&:grown?) ? worker.carry_wood.positive? : worker.full?) || (worker.full? && worker.carry_iron.positive?)
@@ -510,7 +505,7 @@ class Controller
 
     # 2. seed is open, now chop bananas
     choppable = nodes_within_3_of_camp_except_seed
-      .select { cells[_1]&.tree && cells[_1].tree.type?("BANANA") && cells[_1].tree.choppable_for_full_yield(worker.chop_power) }
+      .select { cells[_1]&.tree && cells[_1].tree.type?("BANANA") && cells[_1].tree.choppable_for_full_yield?(worker.chop_power) }
 
     if choppable.any?
       closest = choppable.min_by { shortest_path(worker.node, _1).size }
@@ -878,20 +873,32 @@ class Controller
     false
   end
 
+  # Mainly performed by helper provided he does not have to step out of chopper's way.
   def seek_to_plant_banana(worker)
     seek_to_plant_carried_banana(worker)
     return if plans[worker.id]
 
     # not carrying a banana, should get one
+
+    # 1. yay, on a banana already!
+    if (tree = cells[worker.node]&.tree) && tree.type?("BANANA") && tree.fruit?
+      return go_and_harvest(worker, tree.node)
+    end
+
+    # 2. maybe a banana in neighbor cells
+    nearby_banana = grid.neighbors(worker.node)
+      .select { cells[_1]&.tree&.type?("BANANA") && cells[_1]&.tree&.turns_till_fruit <= 1 }
+      .quick_min_by { shortest_path(seed_node, _1) }
+    return go_and_harvest(worker, nearby_banana) if nearby_banana
+
+    # 3. maybe I have a seeding banana
     seeding_bananas =
       cells[seed_node]&.tree&.type?("BANANA") &&
       cells[seed_node]&.tree&.turns_till_fruit_in_hand(worker, shortest_path(worker.node, seed_node)) < 5
+    return go_and_harvest(worker, seed_node) if seeding_bananas
 
-    if (tree = cells[worker.node]&.tree) && tree.type?("BANANA") && tree.fruit? # ON banana
-      go_and_harvest(worker, tree.node)
-    elsif seeding_bananas
-      return go_and_harvest(worker, seed_node)
-    elsif my_inventory.banana.positive?
+    # 4. oh, well, grabbing from inventory
+    if my_inventory.banana.positive?
       return go_and_pick(worker, closest_dropoff(worker.node), "BANANA")
     elsif (banana_nodes = cells.select { |node, cell| cell&.tree&.type?("BANANA") }).any?
       closest, _cell = banana_nodes.min_by do |node, cell|
@@ -902,7 +909,7 @@ class Controller
         return go_and_harvest(worker, closest)
       end
     else
-      debug("= Hmm, no banana trees on map?")
+      debug("? Hmm, no banana trees on map?")
     end
   end
 
@@ -918,6 +925,7 @@ class Controller
     go_and_harvest(worker, tree.node)
   end
 
+  # assumes empty hand or carried lemon
   def ensure_sufficient_lemon_growth(worker)
     expected_lemon_production_near_camp_per_turn = nodes_within_3_of_camp.sum do |near_node|
       cell = cells[near_node]
@@ -946,6 +954,7 @@ class Controller
     end
   end
 
+  # assumes empty hand or carried plum
   def ensure_sufficient_plum_growth(worker)
     expected_plum_production_near_camp_per_turn = nodes_within_3_of_camp.sum do |near_node|
       cell = cells[near_node]
@@ -1124,7 +1133,7 @@ class Controller
         return
       end
 
-      messages << "trns till #{fruit_type} #{turns_till}"
+      messages << "trns till #{fruit_type} #{((path_to_tree.size - 1)/worker.move_speed.to_f).ceil}"
       go(worker, path_to_tree.last)
     end
   end
@@ -1312,6 +1321,11 @@ class Controller
     }
   end
 
+  # relies on @best_prediction having been set
+  def aimed_chopper_cost
+    best_prediction.costs
+  end
+
   # @return String, nil
   def self_harvest_seed
     # %w[BANANA PLUM LEMON APPLE].each do |type|
@@ -1471,25 +1485,24 @@ class Controller
   # Predictions for which chopper to aim for.
   def init_predictions
     @predictions = []
+    return if chopper
 
-    if chopper.nil?
-      variants = [
-        [2, 4, 0, 3], # best
-        [2, 4, 0, 2], # -1chop
-        [2, 3, 0, 3], # (-1carry)
-        [2, 3, 0, 2], # (-1carry,-1chop)
-      ]
+    variants = [
+      [2, 4, 0, 3], # best
+      [2, 4, 0, 2], # -1chop
+      [2, 3, 0, 3], # (-1carry)
+      [2, 3, 0, 2], # (-1carry,-1chop)
+    ]
 
-      variants.each do |variant|
-        p = predict(*variant)
-        @predictions << p
+    variants.each do |variant|
+      p = predict(*variant)
+      @predictions << p
 
-        # no need to calc all four variants if the cheapest will take 100 turns
-        # break if p.turns > 100
-      end
+      # no need to calc all four variants if the cheapest will take 100 turns
+      # break if p.turns > 100
     end
 
-    @best_prediction = @predictions.sort_by { [-_1.grand_total, _1.turns] }.first
+    @best_prediction ||= @predictions.sort_by { [-_1.grand_total, _1.turns] }.first
 
     nil
   end
@@ -1558,7 +1571,7 @@ class Controller
     return if init_time_remaining < 50
 
     #===
-    return if defined?(LOCAL)
+    # return if defined?(LOCAL)
     #===
 
     ms(">> grass -> seed node init") do
@@ -1596,6 +1609,20 @@ class Controller
 
         grass_nodes.each do |grass_node|
           shortest_path(node, grass_node)
+        end
+      end
+    end
+
+    ms(">> edge-cells -> dropoffs") do
+      grid.nodes.each do |node|
+        break if init_time_remaining < 10
+        next if grid.neighbors(node).none?
+
+        # detect edge nodes
+        next unless node.x.zero? || node.y.zero? || node.x == grid.max_x || node.y == grid.max_y
+
+        dropoff_nodes.each do |dropoff_node|
+          shortest_path(node, dropoff_node)
         end
       end
     end
