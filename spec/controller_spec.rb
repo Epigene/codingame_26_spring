@@ -2310,6 +2310,57 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=4316117710575937500 | Interesting base choke and best to build behind it" do
+      let(:field) do
+        <<~FIELD
+          ..+...........+.....
+          ..........#..0..~...
+          ....~~.~~~....~~~~..
+          ...~~~~~~..~~~~~~~..
+          ..~~~~~~~..~~~~~~~..
+          ..~~~~~~~..~~~~~~~..
+          ..~~~~~~~..~~~~~~...
+          ..~~~~....~~~.~~....
+          ...~..1..#..........
+          .....+...........+..
+        FIELD
+      end
+
+      context "when just starting" do
+        let(:input) do
+          <<~INPUT
+            5 6 9 5 6 0
+            5 6 9 5 6 0
+            16
+            PLUM 19 3 4 12 0 8
+            PLUM 0 6 4 12 0 8
+            PLUM 5 8 4 12 1 3
+            PLUM 14 1 4 12 1 3
+            LEMON 10 9 4 12 0 1
+            LEMON 9 0 4 12 0 1
+            LEMON 0 9 4 12 3 5
+            LEMON 19 0 4 12 3 5
+            LEMON 17 8 4 12 1 8
+            LEMON 2 1 4 12 1 8
+            APPLE 15 8 4 20 0 2
+            APPLE 4 1 4 20 0 2
+            BANANA 18 4 4 6 0 4
+            BANANA 1 5 4 6 0 4
+            BANANA 15 9 4 6 2 2
+            BANANA 4 0 4 6 2 2
+            2
+            0 1 6 8 1 1 1 1 0 0 0 0 0 0
+            1 0 13 1 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to move to the right, the secluded side of camp" do
+          is_expected.to eq("MOVE 1 14 1")
+          expect(controller.send(:seed_node)).to eq("15 1")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

@@ -923,9 +923,11 @@ class Controller
 
     return if expected_lemon_production_near_camp_per_turn >= (2/8.0) # one watered or 2 regular
 
-    wet_path = wet_nodes_within_3_of_camp.select { cells[_1].nil? || cells[_1].tree.nil? }
+    wet_path = wet_nodes_within_3_of_camp
+      # clear of trees
+      .select { cells[_1].nil? || cells[_1].tree.nil? }
       .map { shortest_path(my_camp.node, _1) }
-      .min_by { _1.size }
+      .min_by { _1.size - (node_secluded?(_1.last) ? 1.1 : 0)}
 
     if wet_path
       return handle_planting_at_end_of(worker, wet_path, "LEMON")
@@ -953,7 +955,7 @@ class Controller
 
     wet_path = wet_nodes_within_3_of_camp.select { cells[_1].nil? || cells[_1].tree.nil? }
       .map { shortest_path(my_camp.node, _1) }
-      .min_by { _1.size }
+      .min_by { _1.size - (node_secluded?(_1.last) ? 1.1 : 0)}
 
     if wet_path
       return handle_planting_at_end_of(worker, wet_path, "PLUM")
@@ -1548,6 +1550,9 @@ class Controller
       end
     end
 
+    ms(">> wet node init") { wet_nodes_within_3_of_camp }
+    ms(">> seed note init") { seed_node }
+
     ms(">> #my_nodes init") do
       grass_nodes.each do |grass_node|
         my_path = shortest_path(my_camp.node, grass_node).size - 1
@@ -1590,9 +1595,6 @@ class Controller
         end
       end
     end
-
-    ms(">> wet node init") { wet_nodes_within_3_of_camp }
-    ms(">> seed note init") { seed_node }
 
     ms(">> dropoff points -> all grass init") do
       grid.neighbors(my_camp.node).each do |node|
@@ -1683,6 +1685,10 @@ class Controller
     @nodes_within_3_of_camp_except_seed ||= nodes_within_3_of_camp - [seed_node]
   end
 
+  def node_secluded?(node)
+    distance_between_camps + 10 < (shortest_path(opp_camp.node, node).size - 1)
+  end
+
   # A special node either next to water with 2+ neighboring cells close to camp or a next-to-camp cell
   # where a banana for continuous replanting will be planted and never chopped
   def seed_node
@@ -1692,7 +1698,10 @@ class Controller
       if wet_nodes_within_3_of_camp.any?
         wet_nodes_within_3_of_camp.sort_by do |node|
           [
-            -(grid.neighbors(node) & nodes_within_3_of_camp).size,
+            # high seclusion (at least 10 extra cells to reach) is worth one neighboring cell, so a 2N would also be fine
+            -_seclusion_and_neighbor_score =
+              (node_secluded?(node) ? 1 : 0) +
+              (grid.neighbors(node) & nodes_within_3_of_camp).size,
             shortest_path(my_camp.node, node).size,
             -shortest_path(opp_camp.node, node).size
           ]
