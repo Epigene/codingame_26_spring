@@ -603,7 +603,7 @@ class Controller
     #  1. Reach 17 lemons
     #  2. 10 iron
     #  3. 5 plums (easy)
-    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+    if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
       debug("= Helper will help scale to chopper")
 
       seek_to_plant_carried_banana(worker) ||
@@ -731,7 +731,7 @@ class Controller
     end
 
     xms("> inter chopper scaling") do
-      if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0')
+      if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
         debug("== inter helping scale to chopper")
 
         (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
@@ -1473,22 +1473,21 @@ class Controller
   # Predictions for which chopper to aim for.
   def init_predictions
     @predictions = []
+    return if chopper
 
-    if chopper.nil?
-      variants = [
-        [2, 4, 0, 3], # best
-        [2, 4, 0, 2], # -1chop
-        [2, 3, 0, 3], # (-1carry)
-        [2, 3, 0, 2], # (-1carry,-1chop)
-      ]
+    variants = [
+      [2, 4, 0, 3], # best
+      [2, 4, 0, 2], # -1chop
+      [2, 3, 0, 3], # (-1carry)
+      [2, 3, 0, 2], # (-1carry,-1chop)
+    ]
 
-      variants.each do |variant|
-        p = predict(*variant)
-        @predictions << p
+    variants.each do |variant|
+      p = predict(*variant)
+      @predictions << p
 
-        # no need to calc all four variants if the cheapest will take 100 turns
-        # break if p.turns > 100
-      end
+      # no need to calc all four variants if the cheapest will take 100 turns
+      # break if p.turns > 100
     end
 
     @best_prediction = @predictions.sort_by { [-_1.grand_total, _1.turns] }.first
@@ -1598,6 +1597,20 @@ class Controller
 
         grass_nodes.each do |grass_node|
           shortest_path(node, grass_node)
+        end
+      end
+    end
+
+    ms(">> edge-cells -> dropoffs") do
+      grid.nodes.each do |node|
+        break if init_time_remaining < 10
+        next if grid.neighbors(node).none?
+
+        # detect edge nodes
+        next unless node.x.zero? || node.y.zero? || node.x == grid.max_x || node.y == grid.max_y
+
+        dropoff_nodes.each do |dropoff_node|
+          shortest_path(node, dropoff_node)
         end
       end
     end
