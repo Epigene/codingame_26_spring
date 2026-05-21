@@ -417,7 +417,7 @@ class Controller
 
     elapsed_ms = turn_time_taken
     debug("== turn #{turn} took #{elapsed_ms}ms to calculate")
-    raise("Turn #{turn} took #{elapsed_ms}ms to calculate, too slow!") if elapsed_ms > 55
+    raise("Turn #{turn} took #{elapsed_ms}ms to calculate, too slow!") if (elapsed_ms > 55 && !defined?(LOCAL)) || elapsed_ms > 80
 
     result == "" ? "WAIT" : result
   end
