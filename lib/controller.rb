@@ -973,7 +973,8 @@ class Controller
       # clear of trees
       .select { cells[_1].nil? || cells[_1].tree.nil? }
       .map { shortest_path(my_camp.node, _1) }
-      .min_by { _1.size - (node_secluded?(_1.last) ? 1.1 : 0)}
+      .sort_by { [_1.size - (node_secluded?(_1.last) ? 1.1 : 0), -shortest_path(opp_camp.node, _1.last).size]}
+      .first
 
     if wet_path
       return handle_planting_at_end_of(worker, wet_path, "LEMON")
@@ -1119,21 +1120,32 @@ class Controller
 
   def gather_and_plant(worker, fruit_type)
     if worker.carrying?(fruit_type)
-      node = nodes_within_3_of_camp_except_seed.select { cells[_1]&.tree.nil? }
+      plantable_node = nodes_within_3_of_camp_except_seed.select { cells[_1]&.tree.nil? }
+        # TODO, camps being near can result in stupid situations where I plant closer to opp than myself
+        .reject { shortest_path(opp_camp.node, _1).size < 5 }
         .min_by do |node|
           shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size -
             (wet_nodes.include?(node) ? 0.5 : 0)
         end
 
-      raise("oof, no free cells near base") if node.nil?
+      if plantable_node.nil?
+        debug("XX No plantable nodes?")
+        go_and_drop(worker, closest_dropoff(worker.node))
+      end
 
-      return go_and_plant(worker, node, fruit_type)
+      return go_and_plant(worker, plantable_node, fruit_type)
     else
       closest_fruit = trees.select { _1.type?(fruit_type) }
-        .min_by { _1.turns_till_fruit_in_hand(worker, shortest_path(worker.node, _1.node)) }
+        .sort_by do |tree|
+          [
+            tree.turns_till_fruit_in_hand(worker, shortest_path(worker.node, tree.node)),
+            -shortest_path(opp_camp.node, tree.node).size
+          ]
+        end
+        .first
 
       unless closest_fruit
-        debug("= Wow, I have no #{fruit_type} at camp and no trees on map")
+        debug("XX Wow, I have no #{fruit_type} at camp and no trees on map")
         return false
       end
 
@@ -1208,7 +1220,7 @@ class Controller
 
   # assumes free-ish hands
   def chop_wars(worker)
-    ms(">> CHOP WARS calc for worker #{worker}") do
+    xms(">> CHOP WARS calc for worker #{worker}") do
       return if !worker.can_chop?
       # WAR, seek to fight over chopping if opp within 2 turns can be cought
       opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
@@ -1495,6 +1507,40 @@ class Controller
   #  TURN INIT BELOW
   #===================
 
+  # Predictions for which chopper to aim for.
+  def init_predictions
+    @predictions = []
+    return if chopper
+
+    variants = [
+      [2, 4, 0, 3], # best
+      [2, 4, 0, 2], # -1chop
+      [2, 3, 0, 3], # (-1carry)
+      [2, 3, 0, 2], # (-1carry,-1chop)
+    ]
+
+    variants.each do |variant|
+      p = predict(*variant)
+      @predictions << p
+
+      # no need to calc all four variants if the cheapest will take 100 turns
+      # break if p.turns > 100
+    end
+
+    @best_prediction = @predictions.sort_by { [-_1.grand_total, _1.turns] }.first
+
+    nil
+  end
+
+  # a sort of postprocessing that uses time left at the end of a turn to precrunch shortest paths regarding trees
+  def prefill_tree_paths
+    trees.each do |tree|
+      break if turn_time_remaining < 1
+
+      shortest_path(my_camp.node, tree.node)
+    end
+  end
+
   def init_turn_variables!
     lines = input.split("\n")
 
@@ -1546,40 +1592,6 @@ class Controller
     end
 
     init_predictions
-  end
-
-  # Predictions for which chopper to aim for.
-  def init_predictions
-    @predictions = []
-    return if chopper
-
-    variants = [
-      [2, 4, 0, 3], # best
-      [2, 4, 0, 2], # -1chop
-      [2, 3, 0, 3], # (-1carry)
-      [2, 3, 0, 2], # (-1carry,-1chop)
-    ]
-
-    variants.each do |variant|
-      p = predict(*variant)
-      @predictions << p
-
-      # no need to calc all four variants if the cheapest will take 100 turns
-      # break if p.turns > 100
-    end
-
-    @best_prediction = @predictions.sort_by { [-_1.grand_total, _1.turns] }.first
-
-    nil
-  end
-
-  # a sort of postprocessing that uses time left at the end of a turn to precrunch shortest paths regarding trees
-  def prefill_tree_paths
-    trees.each do |tree|
-      break if turn_time_remaining < 1
-
-      shortest_path(my_camp.node, tree.node)
-    end
   end
 
   # Grid init is a simple fill, bet we make caps leave-only (and maybe rocks in future leagues)
@@ -1637,7 +1649,7 @@ class Controller
       end
     end
 
-    return if init_time_remaining < 50
+    return if init_time_remaining < 2
 
     #===
     # return if defined?(LOCAL)
@@ -1645,6 +1657,8 @@ class Controller
 
     ms(">> grass -> seed node init") do
       grass_nodes.each do |grass_node|
+        return if init_time_remaining < 2
+
         shortest_path(grass_node, seed_node)
       end
     end
@@ -1653,6 +1667,8 @@ class Controller
 
     ms(">> dropoffs -> mining init") do
       mining_nodes.each do |mining_node|
+        return if init_time_remaining < 2
+
         grid.neighbors(my_camp.node).each do |grass_node|
           shortest_path(grass_node, mining_node)
         end
@@ -1661,6 +1677,8 @@ class Controller
 
     ms(">> all near-camp node connections") do
       nodes_within_3_of_camp.each do |node|
+        return if init_time_remaining < 2
+
         nodes_within_3_of_camp.each do |other_node|
           next if node == other_node
 
@@ -1671,11 +1689,19 @@ class Controller
 
     ms(">> dropoff points -> all grass init") do
       grid.neighbors(my_camp.node).each do |node|
-        break if init_time_remaining < 10
+        break if init_time_remaining < 2
 
         grass_nodes.each do |grass_node|
           shortest_path(node, grass_node)
         end
+      end
+    end
+
+    ms(">> opp camp -> all grass init") do
+      grass_nodes.each do |grass_node|
+        break if init_time_remaining < 2
+
+        shortest_path(opp_camp.node, grass_node)
       end
     end
 

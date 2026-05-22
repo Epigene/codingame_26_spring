@@ -2637,6 +2637,169 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          ..+..#......#~~~
+          .......#.#.~~~~~
+          .....#.....~~~~~
+          +.....1....~~...
+          ...~~....0.....+
+          ~~~~~.....#.....
+          ~~~~~.#.#.......
+          ~~~#......#..+..
+        FIELD
+      end
+
+      context "when its the very 1st turn and we're getting an intern" do
+        let(:turn) { 1 }
+        let(:input) do
+          <<~INPUT
+            9 2 6 6 4 0
+            9 2 6 6 4 0
+            18
+            PLUM 14 6 4 12 1 8
+            PLUM 1 1 4 12 1 8
+            PLUM 10 4 4 12 1 7
+            PLUM 5 3 4 12 1 7
+            LEMON 0 2 3 10 0 2
+            LEMON 15 5 3 10 0 2
+            LEMON 9 0 2 8 0 3
+            LEMON 6 7 2 8 0 3
+            APPLE 12 7 3 17 0 5
+            APPLE 3 0 3 17 0 5
+            APPLE 4 0 4 20 0 2
+            APPLE 11 7 4 20 0 2
+            APPLE 8 1 4 20 1 9
+            APPLE 7 6 4 20 1 9
+            BANANA 9 6 4 6 0 6
+            BANANA 6 1 4 6 0 6
+            BANANA 4 2 4 6 2 1
+            BANANA 11 5 4 6 2 1
+            2
+            0 1 6 3 1 1 1 1 0 0 0 0 0 0
+            1 0 9 4 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for helper to go right, away from opp" do
+          is_expected.to eq("TRAIN 2 1 1 1; MOVE 1 10 4")
+        end
+      end
+
+      context "when inter is carrying a lemon near opp base which happens to be closest 3-cell to base" do
+        let(:turn) { 2 }
+        let(:input) do
+          <<~INPUT
+            4 0 4 6 2 0
+            9 2 6 6 4 0
+            18
+            PLUM 14 6 4 12 1 7
+            PLUM 1 1 4 12 1 7
+            PLUM 10 4 4 12 1 6
+            PLUM 5 3 4 12 1 6
+            LEMON 0 2 3 10 0 1
+            LEMON 15 5 3 10 0 1
+            LEMON 9 0 2 8 0 2
+            LEMON 6 7 2 8 0 2
+            APPLE 12 7 3 17 0 4
+            APPLE 3 0 3 17 0 4
+            APPLE 4 0 4 20 0 1
+            APPLE 11 7 4 20 0 1
+            APPLE 8 1 4 20 1 8
+            APPLE 7 6 4 20 1 8
+            BANANA 9 6 4 6 0 5
+            BANANA 6 1 4 6 0 5
+            BANANA 4 2 4 6 3 6
+            BANANA 11 5 4 6 3 6
+            3
+            0 1 5 3 1 1 1 1 0 0 0 0 0 0
+            1 0 9 3 1 1 1 1 0 0 0 0 0 0
+            2 0 9 4 2 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter not to plant, but get closer home" do
+          is_expected.to eq("MSG trns till PLUM 2, getting seed LEMON; MOVE 1 10 3; MOVE 2 11 4")
+        end
+      end
+
+      context "when inter is carrying a lemon near opp base which happens to be closest 3-cell to base" do
+        let(:turn) { 15 }
+        let(:input) do
+          <<~INPUT
+            6 0 4 6 2 0
+            9 2 6 6 5 0
+            18
+            PLUM 14 6 4 12 2 1
+            PLUM 1 1 4 12 2 1
+            PLUM 10 4 4 12 1 8
+            PLUM 5 3 4 12 3 8
+            LEMON 0 2 4 12 0 3
+            LEMON 15 5 4 12 1 3
+            LEMON 9 0 4 12 0 4
+            LEMON 6 7 4 12 0 4
+            APPLE 12 7 4 20 1 8
+            APPLE 3 0 4 20 1 8
+            APPLE 4 0 4 20 2 5
+            APPLE 11 7 4 20 2 5
+            APPLE 8 1 4 20 2 3
+            APPLE 7 6 4 20 2 3
+            BANANA 9 6 4 6 2 3
+            BANANA 6 1 4 6 2 3
+            BANANA 4 2 4 6 3 0
+            BANANA 11 5 4 6 3 0
+            3
+            0 1 8 4 1 1 1 1 0 0 0 0 0 0
+            1 0 13 4 1 1 1 1 0 0 0 0 1 0
+            2 0 6 4 2 1 1 1 0 1 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter not to plant, but get closer home" do
+          is_expected.to include("MOVE 2 7 5")
+        end
+      end
+
+      context "when " do
+        let(:turn) { 28 }
+        let(:input) do
+          <<~INPUT
+            6 1 4 6 4 0
+            9 3 6 6 5 0
+            19
+            PLUM 14 6 4 12 3 0
+            PLUM 1 1 4 12 3 0
+            PLUM 10 4 4 12 2 2
+            PLUM 5 3 4 12 3 0
+            LEMON 0 2 4 12 1 5
+            LEMON 15 5 4 12 3 5
+            LEMON 9 0 4 12 2 6
+            LEMON 6 7 4 12 1 6
+            APPLE 12 7 4 20 2 3
+            APPLE 3 0 4 20 2 3
+            APPLE 4 0 4 20 3 0
+            APPLE 11 7 4 20 3 0
+            APPLE 8 1 4 20 3 0
+            APPLE 7 6 4 20 3 0
+            BANANA 9 6 4 6 3 0
+            BANANA 6 1 4 6 3 0
+            BANANA 4 2 4 6 3 0
+            BANANA 11 5 4 6 3 0
+            LEMON 6 4 2 8 0 3
+            3
+            0 1 5 3 1 1 1 1 0 0 0 0 0 0
+            1 0 10 4 1 1 1 1 0 0 0 0 0 0
+            2 0 10 6 2 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for helper to scale some lemons, goddamit" do
+          is_expected.to include("PICK 1 LEMON")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
