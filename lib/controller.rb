@@ -16,6 +16,10 @@ Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
     plum + lemon + apple + banana + (4 * wood)
   end
 
+  def any_fruit?
+    has?("PLUM") || has?("LEMON") || has?("APPLE") || has?("BANANA")
+  end
+
   # @return [String, nil] # "1 1 1 1"
   def best_intermediate_worker(existing_worker_count)
     tiers = [
@@ -387,7 +391,7 @@ class Controller
       end
     end
 
-    if chopper.nil? && my_inventory.can_afford?(best_prediction.costs)
+    if chopper.nil? && best_prediction && my_inventory.can_afford?(best_prediction.costs)
       debug("= OK, time to get chopper #{best_prediction.name} and start chopping!")
       @training = "TRAIN #{best_prediction.name}"
     end
@@ -617,8 +621,8 @@ class Controller
       debug("- Helper will help scale to chopper")
 
       seek_to_plant_carried_banana(worker) ||
-        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
-        (my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
+        (likelyhood_opp_scales > 0.5 && my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
+        (likelyhood_opp_scales > 0.5 && my_inventory.plum < aimed_chopper_cost["PLUM"] && ensure_sufficient_plum_growth(worker)) ||
         harvest_already_stood_on_tree(
           worker,
           *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
@@ -648,6 +652,11 @@ class Controller
     if trees.select(&:grown?).none?
       seek_to_self_plant(worker)
       return if plans[worker.id]
+
+      if opp_inventory.any_fruit?
+        closest_corner = opp_corners.min_by { shortest_path(worker.node, _1).size + shortest_path(my_camp.node, _1).size }
+        return go(worker, closest_corner)
+      end
     end
 
     if worker.full? && worker.carry_banana.zero?
@@ -813,6 +822,11 @@ class Controller
     if trees.select(&:grown?).none?
       seek_to_self_plant(worker)
       return if plans[worker.id]
+
+      if opp_inventory.any_fruit?
+        closest_corner = opp_corners.min_by { shortest_path(worker.node, _1).size + shortest_path(my_camp.node, _1).size }
+        return go(worker, closest_corner)
+      end
     end
 
     debug("= hmm, inter has nothing to do")
@@ -1043,18 +1057,30 @@ class Controller
 
   # a generic going. Checks about having reached should occur beforehand in callers.
   def go(worker, node)
-    excludable =
-      if worker.id == chopper&.id
-        nil
-      else
-        plans[chopper&.id]&.node
+
+    # if node_reserved_by_any_plan?(node)
+    #   path = shortest_path(worker.node, node)
+    #   # and worker is one step away from the reserved dropoff
+    #   if ((path.size - 1) / worker.move_speed.to_f) == 1
+    #     # try an alternate dropoff
+    #     alternate_dropoff = (dropoff_nodes - [node]).min_by { shortest_path(worker.node, _1).size }
+
+    #     return go(worker, alternate_dropoff) if alternate_dropoff
+    #   end
+    # end
+
+    path = shortest_path(worker.node, node)
+    naive_node = path[worker.move_speed] || path.last
+
+    if node_reserved_by_any_plan?(naive_node)
+      alternate_path = shortest_path(worker.node, node, excluding: [naive_node])
+      if alternate_path && alternate_path.size == path.size
+        alternate_node = alternate_path[worker.move_speed] || alternate_path.last
+        return plans[worker.id] = Plan.new("MOVE", worker.id, nil, alternate_node)
       end
+    end
 
-    path =
-      shortest_path(worker.node, node, excluding: excludable ? [excludable] : nil) ||
-      shortest_path(worker.node, node)
-
-    plans[worker.id] = Plan.new("MOVE", worker.id, nil, path[worker.move_speed] || path.last)
+    plans[worker.id] = Plan.new("MOVE", worker.id, nil, naive_node)
   end
 
   def go_and_mine(worker, node)
@@ -1392,6 +1418,16 @@ class Controller
     shortest_path(from_node, closest_dropoff(from_node))
   end
 
+  # @return 0..1 . If 0 it's near certain opp is going for chop-all strat
+  def likelyhood_opp_scales
+    opp_distance_to_lemons = trees.select { _1.type?("LEMON") }
+      .map { shortest_path(opp_camp.node, _1.node ).size - 2 }.min || 99
+
+    return 0 if turn > 16 && opp_distance_to_lemons > 5
+
+    1
+  end
+
   # @return Hash {move: 1, ..}
   def worker_cost(move, carry, harvest, chop)
     existing_workers = my_workers.size
@@ -1417,7 +1453,12 @@ class Controller
 
   # 65 turns are known to be too many, 50 likely ok, but may go lower
   def no_way_to_scale_to_chopper
-    chopper.nil? && my_inventory.lemon < 4 && (turns_till_own_lemon_tree + turn) > 50
+    return true if chopper.nil? && my_inventory.lemon < 4 && (turns_till_own_lemon_tree + turn) > 50
+
+    # may tune this to be more aggressive, for example at 6 trees remaining
+    return true if trees.select(&:grown?).size <= 4 && turn > 80
+
+    false
   end
 
   def turns_till_chopper
@@ -1521,8 +1562,9 @@ class Controller
 
     variants.each do |variant|
       p = predict(*variant)
-      @predictions << p
+      next unless p.grand_total.positive?
 
+      @predictions << p
       # no need to calc all four variants if the cheapest will take 100 turns
       # break if p.turns > 100
     end
@@ -1637,6 +1679,13 @@ class Controller
 
     ms(">> wet node init") { wet_nodes_within_3_of_camp }
     ms(">> seed note init") { seed_node }
+
+    ms(">> #opp_corners init") do
+      grid.neighbors(opp_camp.node).each do |node|
+        @opp_corners ||= Set.new
+        @opp_corners += grid.cells_at_diagonal_distance(opp_camp.node, 1..1) & grid.neighbors(node)
+      end
+    end
 
     ms(">> #my_nodes init") do
       grass_nodes.each do |grass_node|
@@ -1847,6 +1896,10 @@ class Controller
   # Taken to mean nodes not only closer to my camp but also "behind" my camp from opp's perspective
   def my_nodes
     @my_nodes ||= Set.new
+  end
+
+  def opp_corners
+    @opp_corners ||= Set.new
   end
 
   def tree_period_mapping
