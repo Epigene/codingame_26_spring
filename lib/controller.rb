@@ -695,6 +695,24 @@ class Controller
   end
 
   def organize_intermediate(worker)
+    disallowed_nodes = plans.values.map(&:node).compact
+
+    # Get off square chopper wants to get to
+    if chopper && plans.values.any? { _1.node == worker.node }
+      # looks like inter will drop, shooing away
+      if worker.full? && dropoff_nodes.include?(worker.node)
+        alternate_dropoff = (dropoff_nodes - [worker.node]).min_by { shortest_path(worker.node, _1).size }
+        messages << "sidestepping"
+        return go_and_drop(worker, alternate_dropoff)
+      end
+
+      # looks like inter will harvest, shooing away
+      if !worker.full? && cells[worker.node]&.tree&.fruit?
+        messages << "sidestepping"
+        harvest_closest_harvestable(worker, _except_nodes = [worker.node])
+      end
+    end
+
     # 0. unload if carrying wood for some reason
     if worker.carry_wood.positive? || (worker.full? && worker.carry_iron.positive?)
       return go_and_drop(worker, closest_dropoff(worker.node))
@@ -796,8 +814,9 @@ class Controller
   end
 
   # Regular harvesting for inter
-  def harvest_closest_harvestable(worker)
+  def harvest_closest_harvestable(worker, except_nodes=[])
     closest_harvestable_tree = trees.select do |tree|
+      next false if except_nodes.include?(tree.node)
       # let's never try to harvest what chopper is cutting down
       next false if plans[chopper&.id]&.chop? && plans[chopper.id].node == tree.node
       next false if tree.node == seed_node
@@ -873,12 +892,16 @@ class Controller
     # 2. seek to plant next to seed node
     closest = nodes_within_3_of_camp_except_seed
       .select { cells[_1]&.tree.nil? }
-      .min_by do |node|
-        shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size +
-          shortest_path(seed_node, node).size -
-          # wetness is treated as being half a square closer, giving a tiebreaking advantage
-          (wet_nodes.include?(node) ? 0.5 : 0)
-      end
+      .sort_by do |node|
+        [
+          shortest_path(worker.node, node).size + shortest_path(my_camp.node, node).size +
+            shortest_path(seed_node, node).size -
+            # wetness is treated as being half a square closer, giving a tiebreaking advantage
+            (wet_nodes.include?(node) ? 0.5 : 0),
+          # further from opp is better as tiebreaker
+          -shortest_path(opp_camp.node, node).size
+        ]
+      end.first
 
     if closest
       return go_and_plant(worker, closest, "BANANA")

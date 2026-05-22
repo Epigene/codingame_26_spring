@@ -2361,6 +2361,126 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=-2046562276680836000 | sidewater" do
+      let(:field) do
+        <<~FIELD
+          ...............~
+          ~.+............~
+          ~~~............~
+          ~~..0#........~~
+          ~~........#1..~~
+          ~............~~~
+          ~............+.~
+          ~...............
+        FIELD
+      end
+
+      context "when chopper just dropped wood and there are several options around" do
+        let(:turn) { 83 }
+        let(:input) do
+          <<~INPUT
+            6 2 0 1 0 8
+            0 0 9 5 1 6
+            17
+            PLUM 12 7 4 8 2 3
+            PLUM 3 0 4 12 3 0
+            LEMON 1 1 4 12 3 0
+            LEMON 14 6 4 12 3 0
+            LEMON 11 3 4 12 3 5
+            LEMON 4 4 4 12 3 0
+            LEMON 1 7 4 12 3 0
+            LEMON 14 0 4 12 3 0
+            APPLE 14 7 4 20 3 0
+            APPLE 1 0 4 20 3 0
+            APPLE 11 5 4 20 3 9
+            PLUM 2 3 4 12 3 3
+            BANANA 5 2 3 5 0 6
+            BANANA 3 2 3 5 0 4
+            BANANA 3 3 1 3 0 2
+            BANANA 3 4 1 3 0 5
+            LEMON 13 3 1 6 0 3
+            6
+            0 0 3 3 1 1 1 1 0 0 0 0 0 0
+            1 1 13 3 1 1 1 1 0 0 0 0 0 0
+            2 0 2 3 1 2 2 1 0 0 0 0 0 0
+            3 1 12 7 2 2 1 2 0 0 0 0 0 0
+            4 0 4 2 2 4 0 3 0 0 0 0 0 0
+            5 1 11 3 2 2 1 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for chopper to get closer to nearby busy plumtree chopping, pushing Inter out of the way" do
+          is_expected.to eq("MSG sidestepping; MOVE 4 3 3; MOVE 0 2 3; MOVE 2 2 4")
+        end
+      end
+    end
+
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          .......~~~~~~~~.....
+          .....#.~~~~~~~~~....
+          ....#...+~~~~~~~....
+          .........~~~#~~~....
+          .....0.....+#.......
+          .......#+.....1.....
+          ....~~~#~~~.........
+          ....~~~~~~~+...#....
+          ....~~~~~~~~~.#.....
+          .....~~~~~~~~.......
+        FIELD
+      end
+
+      context "when planting tons of bananas" do
+        let(:turn) { 118 }
+        let(:input) do
+          <<~INPUT
+            1 0 9 2 0 16
+            4 16 0 8 11 0
+            27
+            PLUM 19 8 4 12 3 0
+            PLUM 0 1 4 12 3 0
+            PLUM 17 0 4 12 3 0
+            PLUM 2 9 4 12 3 0
+            LEMON 9 4 4 12 3 0
+            LEMON 10 5 4 12 3 0
+            LEMON 3 2 4 12 3 0
+            LEMON 16 7 4 12 3 0
+            LEMON 0 5 4 12 3 0
+            LEMON 19 4 4 12 3 0
+            APPLE 13 4 4 20 3 0
+            APPLE 6 5 4 20 3 2
+            APPLE 1 2 4 20 3 0
+            APPLE 18 7 4 20 3 0
+            BANANA 15 5 4 6 3 0
+            BANANA 3 0 4 6 3 0
+            BANANA 16 9 4 6 3 0
+            PLUM 13 5 4 12 0 5
+            PLUM 12 5 4 12 2 8
+            LEMON 13 6 4 12 2 5
+            LEMON 14 6 4 12 1 7
+            LEMON 15 6 4 12 3 0
+            LEMON 14 4 4 12 2 1
+            BANANA 5 3 4 6 0 6
+            BANANA 4 5 3 5 0 4
+            BANANA 4 4 1 3 0 1
+            BANANA 5 5 1 3 0 3
+            6
+            0 0 5 5 1 1 1 1 0 0 0 1 0 0
+            1 1 13 5 1 1 1 1 0 0 0 0 0 0
+            2 0 6 5 1 2 2 2 0 0 2 0 0 0
+            3 1 12 5 2 2 2 0 2 0 0 0 0 0
+            4 1 9 5 3 4 1 2 0 1 0 0 3 0
+            5 0 6 4 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for helper to go left, in secure area to plant banana" do
+          is_expected.to eq("MOVE 5 5 3; MOVE 0 4 5; MOVE 2 6 4")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
