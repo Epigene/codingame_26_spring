@@ -2476,7 +2476,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for helper to go left, in secure area to plant banana" do
-          is_expected.to eq("MOVE 5 5 3; MOVE 0 4 5; MOVE 2 6 4")
+          is_expected.to eq("MOVE 5 5 3; MOVE 0 4 5; MOVE 2 5 5")
         end
       end
     end
@@ -2531,6 +2531,108 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns to drop lemon in hand for chop battle" do
           is_expected.to eq("DROP 0")
+        end
+      end
+    end
+
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          .......#..1..~........
+          ..+.........~~........
+          ..#.#.......~~~~.+....
+          ~~~#......#...~.......
+          ~~~~~.............~..~
+          ~~~~..............~~~~
+          ~..~.............~~~~~
+          .......~...#......#~~~
+          ....+.~~~~.......#.#..
+          ........~~.........+..
+          ........~..0..#.......
+        FIELD
+      end
+
+      context "when both helper and inter want the same node" do
+        let(:turn) { 25 }
+        let(:input) do
+          <<~INPUT
+            4 4 4 5 2 0
+            0 2 8 5 2 0
+            22
+            PLUM 10 2 4 12 2 2
+            PLUM 1 9 4 12 1 4
+            PLUM 20 1 4 12 1 4
+            LEMON 9 2 4 12 3 0
+            LEMON 12 8 4 7 1 7
+            LEMON 16 7 4 12 1 3
+            LEMON 5 3 4 12 1 3
+            LEMON 4 0 4 12 0 5
+            LEMON 17 10 4 12 0 5
+            APPLE 19 1 4 20 1 8
+            APPLE 2 9 4 20 1 8
+            APPLE 5 1 4 20 3 2
+            APPLE 16 9 4 20 3 2
+            APPLE 9 1 4 20 3 0
+            APPLE 12 9 4 20 3 0
+            BANANA 7 9 4 6 3 0
+            BANANA 14 1 4 6 3 0
+            BANANA 5 9 4 6 3 0
+            BANANA 16 1 4 6 3 0
+            BANANA 1 6 4 6 3 4
+            BANANA 20 4 4 6 3 4
+            LEMON 10 9 4 12 1 1
+            4
+            0 1 12 8 1 1 1 1 0 0 0 0 0 0
+            1 0 10 9 1 1 1 1 0 1 0 0 0 0
+            2 0 10 10 1 2 2 2 0 2 0 0 0 0
+            3 1 9 6 2 2 0 2 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns a command for inter to scurry off" do
+          is_expected.to eq("MSG sidestepping; MOVE 1 10 10; MOVE 2 10 9")
+        end
+      end
+
+      context "when helper will pick and inter should just go to other nearby free dropoff" do
+        let(:turn) { 26 }
+        let(:input) do
+          <<~INPUT
+            4 4 4 5 2 0
+            0 2 8 5 2 0
+            22
+            PLUM 10 2 4 12 2 1
+            PLUM 1 9 4 12 1 3
+            PLUM 20 1 4 12 1 3
+            LEMON 9 2 4 12 3 0
+            LEMON 12 8 4 6 1 6
+            LEMON 16 7 4 12 1 2
+            LEMON 5 3 4 12 1 2
+            LEMON 4 0 4 12 0 4
+            LEMON 17 10 4 12 0 4
+            APPLE 19 1 4 20 1 7
+            APPLE 2 9 4 20 1 7
+            APPLE 5 1 4 20 3 1
+            APPLE 16 9 4 20 3 1
+            APPLE 9 1 4 20 3 0
+            APPLE 12 9 4 20 3 0
+            BANANA 7 9 4 6 3 0
+            BANANA 14 1 4 6 3 0
+            BANANA 5 9 4 6 3 0
+            BANANA 16 1 4 6 3 0
+            BANANA 1 6 4 6 3 3
+            BANANA 20 4 4 6 3 3
+            LEMON 10 9 4 12 2 3
+            4
+            0 1 12 8 1 1 1 1 0 0 0 0 0 0
+            1 0 10 10 1 1 1 1 0 1 0 0 0 0
+            2 0 10 9 1 2 2 2 0 2 0 0 0 0
+            3 1 9 4 2 2 0 2 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns a command for inter to got to free dropoff" do
+          is_expected.to include("MOVE 2 11 9")
         end
       end
     end

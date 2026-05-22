@@ -697,19 +697,24 @@ class Controller
   def organize_intermediate(worker)
     disallowed_nodes = plans.values.map(&:node).compact
 
-    # Get off square chopper wants to get to
-    if chopper && plans.values.any? { _1.node == worker.node }
+    # Get off square chopper or helper want to get to
+    if plans.values.any? { _1.node == worker.node }
       # looks like inter will drop, shooing away
       if worker.full? && dropoff_nodes.include?(worker.node)
-        alternate_dropoff = (dropoff_nodes - [worker.node]).min_by { shortest_path(worker.node, _1).size }
         messages << "sidestepping"
+
+        alternate_dropoff = (dropoff_nodes - [worker.node]).min_by { shortest_path(worker.node, _1).size }
+        if alternate_dropoff.nil?
+          return go(worker, grid.neighbors(worker.node).first)
+        end
+
         return go_and_drop(worker, alternate_dropoff)
       end
 
       # looks like inter will harvest, shooing away
       if !worker.full? && cells[worker.node]&.tree&.fruit?
         messages << "sidestepping"
-        harvest_closest_harvestable(worker, _except_nodes = [worker.node])
+        return harvest_closest_harvestable(worker, _except_nodes = [worker.node])
       end
     end
 
@@ -1092,8 +1097,20 @@ class Controller
     end
   end
 
+  # Used to allow any dropoff, but exclusions necessitate exact one, EVEN IF WORKER ALREADY IS ON A DROPOFF
   def go_and_drop(worker, node)
-    if dropoff_nodes.include?(worker.node) # already next to camp!
+    if node_reserved_by_any_plan?(node)
+      path = shortest_path(worker.node, node)
+      # and worker is one step away from the reserved dropoff
+      if ((path.size - 1) / worker.move_speed.to_f) == 1
+        # try an alternate dropoff
+        alternate_dropoff = (dropoff_nodes - [node]).min_by { shortest_path(worker.node, _1).size }
+
+        return go(worker, alternate_dropoff) if alternate_dropoff
+      end
+    end
+
+    if worker.node == node # already at specified dropoff
       plans[worker.id] = Plan.new("DROP", worker.id)
     else
       go(worker, node)
@@ -1128,7 +1145,6 @@ class Controller
   end
 
   # Used by both helper and inter, helper gets prio
-  #
   def gather_initial_fruit(worker, fruit_type, max_wait)
     if worker.full?
       return go_and_drop(worker, closest_dropoff(worker.node))
@@ -1250,12 +1266,24 @@ class Controller
 
         if worker.full?
           messages << "*cracks neck*"
-          return go_and_drop(worker, shortest_path_to_drop(worker.node))
+          return go_and_drop(worker, shortest_path_to_drop(worker.node).last)
         end
 
         messages << "chop warz"
         return go_and_chop(worker, path.last)
       end
+    end
+  end
+
+  # Nodes are reserved by many things. Moving targeting the node or stationary operations remining on the node
+  def node_reserved_by_any_plan?(node)
+    plans.values.any? do |plan|
+      # as in moving elsewhere
+      return true if plan.node == node
+
+      # otherwise worker will remain stationary and reserves current node for next turn also
+      worker = my_workers.find { _1.id == plan.worker_id }
+      worker.node == node
     end
   end
 
