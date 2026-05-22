@@ -2361,6 +2361,59 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=-2046562276680836000 | sidewater" do
+      let(:field) do
+        <<~FIELD
+          ...............~
+          ~.+............~
+          ~~~............~
+          ~~..0#........~~
+          ~~........#1..~~
+          ~............~~~
+          ~............+.~
+          ~...............
+        FIELD
+      end
+
+      context "when chopper is already on best choppable tree in vicinity" do
+        let(:turn) { 67 }
+        let(:input) do
+          <<~INPUT
+            0 2 0 5 0 0
+            0 0 9 5 1 0
+            16
+            PLUM 12 7 4 12 0 3
+            PLUM 3 0 4 12 3 0
+            LEMON 1 1 4 12 3 0
+            LEMON 14 6 4 12 3 0
+            LEMON 11 3 4 12 3 0
+            LEMON 4 4 4 12 3 0
+            LEMON 1 7 4 12 3 0
+            LEMON 14 0 4 12 3 0
+            APPLE 14 7 4 20 3 0
+            APPLE 1 0 4 20 3 0
+            APPLE 11 5 4 20 1 7
+            APPLE 4 2 4 20 3 0
+            BANANA 9 0 4 6 3 0
+            BANANA 6 7 4 6 3 0
+            LEMON 3 2 4 12 3 0
+            PLUM 2 3 4 12 3 0
+            6
+            0 0 3 2 1 1 1 1 0 0 0 0 0 0
+            1 1 11 3 1 1 1 1 0 0 0 0 0 0
+            2 0 2 3 1 2 2 1 0 0 0 0 0 0
+            3 1 12 6 2 2 1 2 0 0 0 0 0 0
+            4 0 4 3 2 4 0 3 0 0 0 0 0 0
+            5 1 11 4 2 2 1 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for chopper to go clear seed node" do
+          is_expected.to eq("MSG clear seed; MOVE 4 3 2; MOVE 0 4 2; HARVEST 2")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

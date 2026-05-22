@@ -475,7 +475,7 @@ class Controller
     return if plans[worker.id]
 
     # 0, if outside base squares (beelined previously), continue on to nearest grown tree
-    if !nodes_within_3_of_camp.include?(worker.node)
+    if !nodes_within_3_of_camp.include?(worker.node) && worker.node != my_camp.node
       closest_grown_tree = trees.select(&:grown?).min_by { shortest_path(worker.node, _1.node).size }
       if closest_grown_tree
         messages << "beeline"
@@ -506,8 +506,9 @@ class Controller
       end
     end
 
-    # 1. clear seed node if it does not have a banana on it
+    # 1. clear seed node if it has a non-banana on it
     if cells[seed_node]&.tree && !cells[seed_node].tree.type?("BANANA")
+      messages << "clear seed"
       return go_and_chop(worker, seed_node)
     end
 
