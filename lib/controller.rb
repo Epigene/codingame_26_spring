@@ -1192,7 +1192,7 @@ class Controller
 
   # assumes free-ish hands
   def chop_wars(worker)
-    xms(">> CHOP WARS calc for worker #{worker}") do
+    ms(">> CHOP WARS calc for worker #{worker}") do
       return if !worker.can_chop?
       # WAR, seek to fight over chopping if opp within 2 turns can be cought
       opp_workers_chopping = workers.select { !_1.my? }.select { _1.can_chop? && cells[_1.node]&.tree&.damaged? }
@@ -1201,6 +1201,10 @@ class Controller
       # maybe already ON chop node
       worker_tree = cells[worker.node]&.tree
       if worker_tree && cells[worker.node]&.opp_worker && worker_tree.damaged?
+        if dropoff_nodes.include?(worker_tree.node) && worker.full?
+          return go_and_drop(worker, worker.node)
+        end
+
         # hey, maybe we're next to base and we can wait efficiently with harvesting in the meantime
         if dropoff_nodes.include?(worker_tree.node)
           opp_worker = cells[worker.node].opp_worker

@@ -2481,6 +2481,60 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          ...................#
+          .............+.....~
+          ...........1...~~.~~
+          ..~~~.~.....~~~~~~~~
+          ..~~~.~.....~~~~~~..
+          ..~~~~~~.....~.~~~..
+          ~~~~~~~~.....~.~~~..
+          ~~.~~...0...........
+          ~.....+.............
+          #...................
+        FIELD
+      end
+
+      context "when " do
+        let(:turn) { 20 }
+        let(:input) do
+          <<~INPUT
+            6 10 4 3 6 0
+            2 4 3 3 4 2
+            18
+            PLUM 14 7 4 12 3 2
+            PLUM 5 2 4 12 2 2
+            LEMON 9 1 4 12 3 0
+            LEMON 10 8 4 12 2 7
+            LEMON 19 5 3 10 0 3
+            LEMON 0 4 3 10 0 3
+            APPLE 12 7 4 20 1 9
+            APPLE 7 2 4 20 1 9
+            APPLE 12 8 4 20 3 0
+            APPLE 7 1 4 20 3 0
+            APPLE 10 2 4 20 0 7
+            APPLE 9 7 4 20 0 7
+            BANANA 1 3 4 6 3 0
+            BANANA 18 6 4 6 3 0
+            BANANA 12 5 4 6 3 0
+            BANANA 15 1 4 6 3 0
+            BANANA 4 8 4 6 3 0
+            LEMON 8 6 4 9 1 1
+            3
+            0 0 8 6 1 1 1 1 0 1 0 0 0 0
+            1 1 6 2 1 1 1 1 0 0 0 0 0 0
+            2 1 8 6 2 2 0 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns to drop lemon in hand for chop battle" do
+          is_expected.to eq("DROP 0")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
@@ -2490,6 +2544,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       context "when " do
+        let(:turn) { 1 }
         let(:input) do
           <<~INPUT
 
