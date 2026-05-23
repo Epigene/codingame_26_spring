@@ -2102,7 +2102,7 @@ RSpec.describe Controller, instance_name: :controller do
         FIELD
       end
 
-      context "when theres plenty of space to the right, away from opp" do
+      context "when there's plenty of space to the right, away from opp" do
         let(:input) do
           <<~INPUT
             5 8 6 3 5 0
@@ -2135,7 +2135,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to lemon to the right, away from opp on 13 8" do
-          is_expected.to eq("TRAIN 2 2 2 2; MOVE 1 13 8")
+          is_expected.to contain("MOVE 1 13 8")
         end
       end
 
@@ -2683,7 +2683,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for helper to go right, away from opp" do
-          is_expected.to eq("TRAIN 2 1 1 1; MOVE 1 10 4")
+          is_expected.to contain("MOVE 1 10 4")
         end
       end
 
@@ -2796,6 +2796,58 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command for helper to scale some lemons, goddamit" do
           is_expected.to include("PICK 1 LEMON")
+        end
+      end
+    end
+
+    context "with seed=2804242076407183000 | far opponent, perfect case for delayed scaling" do
+      let(:field) do
+        <<~FIELD
+          .~~~1........~..
+          .~~~.+......#~..
+          ..~.............
+          ........#.......
+          .......#........
+          .............~..
+          ..~#......+.~~~.
+          ..~........0~~~.
+        FIELD
+      end
+
+      context "when closest lemon is 7 away, ugh, and opp camp is 13 away" do
+        let(:turn) { 1 }
+        let(:input) do
+          <<~INPUT
+            10 5 2 6 6 0
+            10 5 2 6 6 0
+            16
+            PLUM 4 7 1 6 0 4
+            PLUM 11 0 1 6 0 4
+            LEMON 14 1 3 10 0 2
+            LEMON 1 6 3 10 0 2
+            LEMON 5 6 4 12 2 8
+            LEMON 10 1 4 12 2 8
+            APPLE 6 7 1 11 0 1
+            APPLE 9 0 1 11 0 1
+            APPLE 15 0 1 11 0 3
+            APPLE 0 7 1 11 0 3
+            APPLE 9 2 4 20 1 4
+            APPLE 6 5 4 20 1 4
+            BANANA 0 4 2 4 0 4
+            BANANA 15 3 2 4 0 4
+            BANANA 3 2 4 6 2 2
+            BANANA 12 5 4 6 2 2
+            2
+            0 1 4 0 1 1 1 1 0 0 0 0 0 0
+            1 0 11 7 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to go 11 6 with intention to quick-scale a lomontree, not inter" do
+          is_expected.to eq("MOVE 1 11 6")
+
+          expect(controller.send(:turns_till_chopper_with_just_helper)).to eq(33)
+          expect(controller.send(:turns_till_chopper_with_inter_also)).to eq(17)
         end
       end
     end

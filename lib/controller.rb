@@ -379,7 +379,7 @@ class Controller
 
     if turn <= 1
       # in how many turns is it OK to scale straight to chopper. Can probably go lower than 70, maybe 50.
-      if turns_till_chopper > 65
+      if turns_till_chopper_with_inter_also < turns_till_chopper_with_just_helper && turns_till_chopper_with_just_helper > 40
         potential_worker = my_inventory.best_intermediate_worker(my_workers.size)
         if potential_worker
           @training = "TRAIN #{potential_worker}"
@@ -441,7 +441,7 @@ class Controller
   # @return Prediction
   def predict(move, carry, harvest, chop)
     xms("== #{move} #{carry} #{harvest} #{chop} chopper") do
-      costs = worker_cost(move, carry, harvest, chop)
+      costs = worker_cost(move, carry, harvest, chop).freeze
 
       turns =
         turns_to_gather("PLUM", costs["PLUM"] - my_inventory.plum) +
@@ -453,7 +453,7 @@ class Controller
 
       p = Prediction.new(
         move, carry, harvest, chop, costs, turns, remaining_turns
-      )
+      ).freeze
       p.report
       p
     end
@@ -630,7 +630,7 @@ class Controller
           my_inventory.lemon >= aimed_chopper_cost["LEMON"] && my_inventory.plum >= aimed_chopper_cost["PLUM"] &&
             gather_iron(worker)
         ) ||
-        (inter && (turns_till_chopper < 15) && seek_to_plant_banana(worker)) ||
+        (inter && (turns_till_chopper_with_just_helper < 15) && seek_to_plant_banana(worker)) ||
         (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
         (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
         (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
@@ -1420,11 +1420,30 @@ class Controller
     chopper.nil? && my_inventory.lemon < 4 && (turns_till_own_lemon_tree + turn) > 50
   end
 
-  def turns_till_chopper
-    -[my_inventory.plum - 5, 0].min * 5 +
-      -[my_inventory.lemon - 17, 0].min * 5 +
-      -[my_inventory.apple - 1, 0].min * 5 +
-      -[my_inventory.iron - 10, 0].min * shortest_path_to_mining.size * 2
+  # This is very optimistic, does not take trees needing to grow into account
+  def turns_till_chopper_with_just_helper(costs = nil)
+    costs ||= best_prediction&.costs || {
+      "PLUM" => 5, "LEMON" => 10, "APPLE" => 2, "IRON" => 10
+    }
+
+    -[my_inventory.plum - costs["PLUM"], 0].min * 5 +
+      -[my_inventory.lemon - costs["LEMON"], 0].min * 5 +
+      -[my_inventory.apple - costs["APPLE"], 0].min * 5 +
+      -[my_inventory.iron - costs["IRON"], 0].min * (2 + 2 * ((_mine_dist = shortest_path_to_mining.size) == 1 ? 0 : (_mine_dist - 1)))
+  end
+
+  # This is very optimistic, assumes inter to be as productive as helper, which is unlikely.
+  # But with this we are 100% sure that if turns to chopper with inter are the same or higher than
+  # with just heper, it's not worth it to get the inter.
+  def turns_till_chopper_with_inter_also
+    cheapest_inter_cost = worker_cost(1, 1, 1, 1)
+
+    chopper_cost = best_prediction&.costs || {
+      "PLUM" => 5, "LEMON" => 10, "APPLE" => 2, "IRON" => 10
+    }
+
+    sum = turns_till_chopper_with_just_helper(cheapest_inter_cost) + turns_till_chopper_with_just_helper(chopper_cost)
+    (sum / 2.0).ceil
   end
 
   # Not just tree, but 1st fruit from it
@@ -1655,15 +1674,13 @@ class Controller
     # return if defined?(LOCAL)
     #===
 
-    ms(">> grass -> seed node init") do
-      grass_nodes.each do |grass_node|
+    ms(">> within3 -> seed node init") do
+      nodes_within_3_of_camp.each do |near_node|
         return if init_time_remaining < 2
 
-        shortest_path(grass_node, seed_node)
+        shortest_path(near_node, seed_node)
       end
     end
-
-    ms(">> w3 of camp except seed") { nodes_within_3_of_camp_except_seed }
 
     ms(">> dropoffs -> mining init") do
       mining_nodes.each do |mining_node|
@@ -1861,7 +1878,7 @@ class Controller
     elapsed_ms = ((t1 - init_start) * 1000.0).round
   end
 
-  INIT_TIME = 950
+  INIT_TIME = 940
   def init_time_remaining
     INIT_TIME - init_time_taken
   end
