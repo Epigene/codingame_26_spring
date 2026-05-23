@@ -1648,7 +1648,6 @@ class Controller
         end
       end
     end
-
     return if init_time_remaining < 2
 
     #===
@@ -1656,14 +1655,12 @@ class Controller
     #===
 
     ms(">> grass -> seed node init") do
-      grass_nodes.each do |grass_node|
+      nodes_within_3_of_camp.each do |near_node|
         return if init_time_remaining < 2
 
-        shortest_path(grass_node, seed_node)
+        shortest_path(near_node, seed_node)
       end
     end
-
-    ms(">> w3 of camp except seed") { nodes_within_3_of_camp_except_seed }
 
     ms(">> dropoffs -> mining init") do
       mining_nodes.each do |mining_node|
@@ -1861,7 +1858,7 @@ class Controller
     elapsed_ms = ((t1 - init_start) * 1000.0).round
   end
 
-  INIT_TIME = 950
+  INIT_TIME = 940
   def init_time_remaining
     INIT_TIME - init_time_taken
   end
