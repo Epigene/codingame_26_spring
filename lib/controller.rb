@@ -220,6 +220,10 @@ Worker = Struct.new(:id, :player, :x, :y,
     [carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood].sum >= carry_capacity
   end
 
+  def empty?
+    [carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood].sum.zero?
+  end
+
   def carrying?(fruit_type, at_least_count = 1)
     send("carry_#{fruit_type.to_s.downcase}") >= at_least_count
   end
@@ -773,10 +777,15 @@ class Controller
 
     xms("> inter chopper scaling") do
       if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
-        debug("== inter helping scale to chopper")
+        debug("== inter helping scale to chopper #{best_prediction.name}")
 
         (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
           (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
+          (
+            # somehow I'm outside home turf and next to mine, let's take the opportunity
+            my_inventory.iron < 7 && worker.empty? && (mining_nodes.include?(worker.node)) &&
+              shortest_path(worker.node, my_camp.node).size > 4 && gather_iron(worker)
+          ) ||
           (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 1)) ||
           (my_inventory.plum < 2 && gather_initial_fruit(worker, "PLUM", 1)) ||
           (my_inventory.lemon < 2 && gather_initial_fruit(worker, "LEMON", 2)) ||
@@ -1187,7 +1196,6 @@ class Controller
           path = shortest_path(worker.node, node)
           [path, cells[node].tree.turns_till_fruit_in_hand(worker, path)]
         end.select { _2 <= max_wait }.min_by { |_path, turns_till| turns_till }
-
 
       if path_to_tree.nil?
         debug("= No #{fruit_type} trees qualify for early harvesting with a wait time of #{max_wait}")
