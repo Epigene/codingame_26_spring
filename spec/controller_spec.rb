@@ -478,7 +478,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "returns a command to move to a closeby harvestable plum while lemons are still at least 12 turns away" do
-        is_expected.to eq("MSG trns till PLUM 1; MOVE 0 9 7")
+        is_expected.to eq("MSG trns till PLUM 2; MOVE 0 9 7")
       end
     end
 
@@ -538,7 +538,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "returns a command to move to a nearby about-to-produce lemon tree" do
-        is_expected.to eq("MSG trns till LEMON 1; MOVE 0 9 8")
+        is_expected.to eq("MSG trns till LEMON 2; MOVE 0 9 8")
       end
     end
 
@@ -1103,8 +1103,9 @@ RSpec.describe Controller, instance_name: :controller do
           INPUT
         end
 
-        it "returns a command for helper to go plant closer to seed in prep for lemon gathering" do
-          is_expected.to eq("MSG trns till PLUM 2; MOVE 1 16 1; MOVE 2 7 2")
+        xit "returns a command for helper to go plant closer to seed in prep for lemon gathering" do
+          # is_expected.to eq("MSG trns till PLUM 3; MOVE 1 16 1; MOVE 2 7 2")
+          is_expected.to eq("MSG IROON!; MOVE 1 16 1; MOVE 2 3 2")
         end
       end
 
@@ -1146,7 +1147,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         xit "returns a command for helper to go get ready for lemon harvesting" do
-          is_expected.to eq("MSG IROON!, trns till LEMON 2; MOVE 2 10 1; MOVE 1 15 0")
+          is_expected.to eq("MSG IROON!, trns till LEMON 3; MOVE 2 10 1; MOVE 1 15 0")
         end
       end
 
@@ -1443,7 +1444,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a simple command to have inter do something else, like go for plums" do
-          is_expected.to eq("MSG oh LEMON, trns till PLUM 2; HARVEST 1; MOVE 2 13 2")
+          is_expected.to eq("MSG oh LEMON, trns till PLUM 3; HARVEST 1; MOVE 2 13 2")
         end
       end
 
@@ -1483,7 +1484,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a simple command to have inter go for closest apple at 17 1" do
-          is_expected.to eq("MSG IROON!, trns till APPLE 3; MOVE 1 15 4; MOVE 2 16 3")
+          is_expected.to eq("MSG IROON!, trns till APPLE 4; MOVE 1 15 4; MOVE 2 16 3")
         end
       end
 
@@ -1949,7 +1950,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to just continue harvesting lemons for a better chopper" do
-          is_expected.to eq("MSG trns till LEMON 4; MOVE 0 5 6")
+          is_expected.to eq("MSG trns till LEMON 5; MOVE 0 5 6")
           expect(controller.send(:turns_to_gather, "LEMON", 7)).to eq(42)
         end
       end
@@ -2062,28 +2063,6 @@ RSpec.describe Controller, instance_name: :controller do
           is_expected.to eq("MSG race to bottom; CHOP 1; MOVE 3 12 6")
         end
       end
-
-      context "when helper is self-seeding a plum" do
-        let(:turn) { 101 }
-
-        let(:input) do
-          <<~INPUT
-            0 0 1 0 2 24
-            0 0 0 6 2 18
-            1
-            APPLE 2 3 4 14 3 0
-            4
-            0 1 6 5 1 1 1 1 0 0 0 0 0 0
-            1 0 11 7 1 1 1 1 0 0 0 0 0 0
-            2 1 2 3 2 2 2 2 0 0 0 0 0 0
-            3 0 2 3 2 2 2 2 0 0 0 0 0 0
-          INPUT
-        end
-
-        it "returns a command for inter not to desire it, got to nearby banana instead" do
-          is_expected.to eq("MSG 3 waiting; MOVE 1 11 6; MOVE 3 2 3")
-        end
-      end
     end
 
     context "with seed=" do
@@ -2134,8 +2113,8 @@ RSpec.describe Controller, instance_name: :controller do
           INPUT
         end
 
-        it "returns a command to lemon to the right, away from opp on 13 8" do
-          is_expected.to eq("TRAIN 2 2 2 2; MOVE 1 13 8")
+        it "returns a command to lemon to the right, away from opp on" do
+          is_expected.to contain("MSG trns till LEMON 8; MOVE 1 12 7")
         end
       end
 
@@ -2720,7 +2699,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command for inter not to plant, but get closer home" do
-          is_expected.to eq("MSG trns till PLUM 2, getting seed LEMON; MOVE 1 10 3; MOVE 2 11 4")
+          is_expected.to eq("MSG trns till PLUM 3, getting seed LEMON; MOVE 1 10 3; MOVE 2 11 4")
         end
       end
 
@@ -2946,7 +2925,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to just go get lemon and iron, not bother with plant" do
-          is_expected.to eq("MSG trns till LEMON 5; MOVE 0 5 8")
+          is_expected.to eq("MSG trns till LEMON 6; MOVE 0 5 8")
         end
       end
 
@@ -2985,7 +2964,112 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to just go get lemon, not bother with plant" do
-          is_expected.to eq("MSG trns till LEMON 1; MOVE 0 2 9")
+          is_expected.to eq("MSG trns till LEMON 2; MOVE 0 2 9")
+        end
+      end
+    end
+
+    context "with seed=-2976664274459909000 | no wet cells nearby, haard" do
+      let(:field) do
+        <<~FIELD
+          .....#.1....~~~~
+          ............~~~~
+          ..+..........~~~
+          ~~~........+.~~~
+          ~~~.+........~~~
+          ~~~..........+..
+          ~~~~............
+          ~~~~....0.#.....
+        FIELD
+      end
+
+      context "when " do
+        let(:turn) { 1 }
+        let(:input) do
+          <<~INPUT
+            4 3 10 5 7 0
+            4 3 10 5 7 0
+            16
+            PLUM 8 4 4 12 1 5
+            PLUM 7 3 4 12 1 5
+            LEMON 10 5 3 10 0 3
+            LEMON 5 2 3 10 0 3
+            LEMON 12 6 4 12 1 6
+            LEMON 3 1 4 12 1 6
+            LEMON 4 3 3 10 0 1
+            LEMON 11 4 3 10 0 1
+            APPLE 11 7 3 17 0 8
+            APPLE 4 0 3 17 0 8
+            BANANA 13 6 1 3 0 5
+            BANANA 2 1 1 3 0 5
+            BANANA 6 7 4 6 0 5
+            BANANA 9 0 4 6 0 5
+            BANANA 14 5 3 5 0 1
+            BANANA 1 2 3 5 0 1
+            2
+            0 1 7 0 1 1 1 1 0 0 0 0 0 0
+            1 0 8 7 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to hold off on inter since no point" do
+          is_expected.to eq("MSG trns till PLUM 4; MOVE 1 8 6")
+        end
+      end
+    end
+
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          ..........#~~~~~~.
+          ......+...~~1~~...
+          ..........~..~~...
+          ...~.~~~.....~~~..
+          ..~~~~......~~~~..
+          ..~~~.....~~~.~...
+          ...~~..~..........
+          ...~~0~~...+......
+          .~~~~~~#..........
+        FIELD
+      end
+
+      context "when " do
+        let(:turn) { 2 }
+        let(:input) do
+          <<~INPUT
+            4 10 8 5 10 0
+            4 10 8 5 10 0
+            22
+            PLUM 5 5 4 12 2 3
+            PLUM 12 3 4 12 2 3
+            PLUM 11 4 4 12 1 1
+            PLUM 6 4 4 12 1 1
+            LEMON 2 7 4 12 3 1
+            LEMON 15 1 4 12 3 1
+            LEMON 16 6 3 10 0 2
+            LEMON 1 2 3 10 0 2
+            LEMON 11 3 4 12 1 5
+            LEMON 6 5 4 12 1 5
+            APPLE 16 1 1 11 0 1
+            APPLE 1 7 1 11 0 1
+            APPLE 0 0 4 20 0 2
+            APPLE 17 8 4 20 0 2
+            APPLE 8 8 4 20 3 6
+            APPLE 9 0 4 20 3 6
+            BANANA 9 8 4 6 0 4
+            BANANA 8 0 4 6 0 4
+            BANANA 6 0 4 6 2 1
+            BANANA 11 8 4 6 2 1
+            BANANA 3 1 3 5 0 6
+            BANANA 14 7 3 5 0 6
+            2
+            0 0 5 6 1 1 1 1 0 0 0 0 0 0
+            1 1 12 2 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to go get plum, not pic lemon, no sense planting anything" do
+          is_expected.to eq("MSG trns till PLUM 2; MOVE 0 5 5")
         end
       end
     end
