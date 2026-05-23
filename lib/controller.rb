@@ -96,11 +96,11 @@ Tree = Struct.new(:type, :x, :y, :size, :health, :fruits, :cooldown, :period) do
   # @return Numeric
   def turns_till_fruit_in_hand(worker, path_to)
     distance_penalty = ((path_to.size - 1) / worker.move_speed.to_f).ceil
-    return distance_penalty if fruits.positive?
+    return distance_penalty.next if fruits.positive?
 
     cooldown_penalty = (4 - size) * period + cooldown
 
-    [distance_penalty, cooldown_penalty].max
+    [distance_penalty, cooldown_penalty].max.next
   end
 
   def turns_till_chop(worker, path_to)
@@ -296,9 +296,14 @@ Prediction = Struct.new(:move, :carry, :harvest, :chop, :costs, :turns, :remaini
     "#{move} #{carry} #{harvest} #{chop}"
   end
 
+  # Exponential scaling makes faraway turns be more punishing than near ones
+  def turn_adjusted_value
+    (grand_total - 0.15*(turns**1.25)).round
+  end
+
   # key value, tells plan's worth.
   def grand_total
-    chop_points - cost
+    chop_points - (cost * 1.5).round
   end
 
   def cost
@@ -310,7 +315,7 @@ Prediction = Struct.new(:move, :carry, :harvest, :chop, :costs, :turns, :remaini
   end
 
   def cycle_length
-    (6 / chop) + 4
+    (6 / chop.to_f).ceil + 3 + (move < 2 ? 1 : 0)
   end
 
   def chop_cycles
@@ -324,8 +329,8 @@ Prediction = Struct.new(:move, :carry, :harvest, :chop, :costs, :turns, :remaini
   def report
     debug(
       "== #{name} chopper would take ~#{turns} to train, costing #{cost}, " \
-      "leaving #{remaining_turns} turns with a payout of #{wood_points_per_cycle} every #{cycle_length} turns," \
-      "earning #{chop_points}-#{cost}=#{grand_total}"
+      "leaving #{remaining_turns} turns; payout of #{wood_points_per_cycle} every #{cycle_length} turns," \
+      "earning #{chop_points}-#{cost}=#{grand_total} | turn-adjusted value #{turn_adjusted_value}"
     )
   end
 end
@@ -377,7 +382,7 @@ class Controller
     @messages = []
     @plans = {} # worker-id-keyed
 
-    if turn <= 1
+    if turn <= 1 && !use_shortscale?
       # in how many turns is it OK to scale straight to chopper. Can probably go lower than 70, maybe 50.
       if turns_till_chopper > 65
         potential_worker = my_inventory.best_intermediate_worker(my_workers.size)
@@ -594,19 +599,44 @@ class Controller
     end
     return if plans[worker.id]
 
-    # 65 turns are known to be too many, 50 likely ok, but may go lower
-    if no_way_to_scale_to_chopper
-      debug("= Helper sees no time to scale to chopper, self-planting")
+    if use_shortscale? && chopper.nil? && best_prediction
+      debug("- helper will SHORTscale to #{best_prediction.name}")
 
-      # dropping carried wood is handled
-
-      seek_to_self_plant(worker)
-      return if plans[worker.id]
-
-      # hmm, no seeds left, time to chop anything
-      tree = trees.min_by { shortest_path(worker.node, _1.node).size }
-      return go_and_chop(worker, tree.node) if tree
+      harvest_already_stood_on_tree(
+          worker,
+          *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
+        ) ||
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
+        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_initial_fruit(worker, "APPLE", 2)) ||
+        (my_inventory.iron < aimed_chopper_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
+        (
+          my_inventory.lemon >= aimed_chopper_cost["LEMON"] && my_inventory.plum >= aimed_chopper_cost["PLUM"] &&
+            gather_iron(worker)
+        ) ||
+        (inter && (turns_till_chopper < 15) && seek_to_plant_banana(worker)) ||
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
+        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 10)) ||
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 10)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 10)) ||
+        (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) # TODO, may need to detect inter already grabbing last piece
     end
+    return if plans[worker.id]
+
+    # 65 turns are known to be too many, 50 likely ok, but may go lower
+    # if no_way_to_scale_to_chopper
+    #   debug("= Helper sees no time to scale to chopper, self-planting")
+
+    #   # dropping carried wood is handled
+
+    #   seek_to_self_plant(worker)
+    #   return if plans[worker.id]
+
+    #   # hmm, no seeds left, time to chop anything
+    #   tree = trees.min_by { shortest_path(worker.node, _1.node).size }
+    #   return go_and_chop(worker, tree.node) if tree
+    # end
 
     # Initial boosting has one goal - be able to afford an excellent chopper worker.
     # It consists of 3 subgoals:
@@ -614,7 +644,7 @@ class Controller
     #  2. 10 iron
     #  3. 5 plums (easy)
     if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
-      debug("- Helper will help scale to chopper")
+      debug("- helper will scale to chopper #{best_prediction.name}")
 
       seek_to_plant_carried_banana(worker) ||
         (turn < 40 && my_inventory.lemon < aimed_chopper_cost["LEMON"] && ensure_sufficient_lemon_growth(worker)) ||
@@ -1324,7 +1354,7 @@ class Controller
     end
   end
 
-  # Major predictive logic
+  # MAJOR predictive logic
   def turns_to_gather(type, count)
     return 0 unless count.positive?
 
@@ -1359,24 +1389,24 @@ class Controller
         harvesters.each_with_index do |worker, i|
           best_tree, average_yield = xms(">>>> best_tree, average_yield lookup") do
             trees.select { _1.type?(type) }.map do |tree|
-              camp_to_tree_path = shortest_path(my_camp.node, tree.node)
-              distance_to_camp = camp_to_tree_path.size - 1
+              distance_to_camp = shortest_path(my_camp.node, tree.node).size - 1
               [tree, tree.average_fruit_yield(distance_to_camp, worker)]
             end
             .sort_by { |t, average_yield| -average_yield }[i..-1]&.first
           end
 
           if best_tree
-            yields << average_yield.to_f / (0.8**i)
+            yields << average_yield.to_f * (0.8**i)
           else # no tree, maybe we can plant
-            next unless my_inventory.has?(type) # since no way to get more fruit
-
-            penalty_turns ||= 15
+            next if !my_inventory.has?(type) # since no way to get more fruit
+            next if use_shortscale?
 
             if wet_nodes_within_3_of_camp.any?
-              yields << (1/5.0) / (0.8**i)
+              penalty_turns ||= 15
+              yields << (1/5.0) * (0.8**i)
             else
-              yields << (1/9.0) / (0.8**i)
+              penalty_turns ||= 26
+              yields << (1/9.0) * (0.8**i)
             end
           end
         end
@@ -1532,17 +1562,47 @@ class Controller
   #  TURN INIT BELOW
   #===================
 
+  def use_shortscale?
+    return @use_shortscale if defined?(@use_shortscale)
+
+    @use_shortscale = (wet_nodes_within_3_of_camp.size == 0) || (grid.neighbors(my_camp.node).size == 1)
+  end
+
   # Predictions for which chopper to aim for.
   def init_predictions
     @predictions = []
     return if chopper
 
-    variants = [
-      [2, 4, 0, 3], # best
-      [2, 4, 0, 2], # -1chop
-      [2, 3, 0, 3], # (-1carry)
-      [2, 3, 0, 2], # (-1carry,-1chop)
-    ]
+    # This predicts where bootstrapping will not be possible and we should consider closest
+    # "choppers" instead
+
+    variants =
+      if use_shortscale?
+        move = my_inventory.best_affordable_train_tier("PLUM", 3, _existing = 1)
+        carry = my_inventory.best_affordable_train_tier("LEMON", 3, _existing = 1)
+        chop = my_inventory.best_affordable_train_tier("IRON", 3, _existing = 1)
+
+        # from current situation all combos of scaling up a bit
+        [
+          [move, carry, 0, chop],
+          [move.next, carry, 0, chop],
+          [move, carry.next, 0, chop],
+          [move, carry, 0, chop.next],
+          [move.next, carry.next, 0, chop],
+          [move.next, carry, 0, chop.next],
+          [move, carry.next, 0, chop.next],
+          [move.next, carry.next, 0, chop.next]
+        ]
+        # not going for 4 carry, its unlikely to pan out
+        .reject { |d| d[1] > 3 }
+      else # regular full-power variants
+        [
+          [2, 4, 0, 3], # best
+          [2, 4, 0, 2], # -1chop
+          [2, 3, 0, 3], # (-1carry)
+          [2, 3, 0, 2], # (-1carry,-1chop)
+        ]
+      end
 
     variants.each do |variant|
       p = predict(*variant)
@@ -1585,9 +1645,6 @@ class Controller
       @cells["#{x} #{y}"].tree = tree
     end
 
-    @chopper ||= nil
-    @inter ||= nil
-
     @workers = []
     lines.shift.to_i.times do
       id, player, x, y, move_speed, carry_capacity, harvest_power, chop_power, carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood = lines.shift.split.map(&:to_i)
@@ -1603,16 +1660,26 @@ class Controller
 
       if worker.my?
         @cells["#{x} #{y}"].worker = worker
+      else
+         @cells["#{x} #{y}"].opp_worker = worker
+      end
+    end
 
-        if worker.id == 0 || worker.id == 1
-          @helper = worker
-        elsif worker.harvest_power.zero? && worker.carry_capacity >= 2 && worker.move_speed >= 2 && worker.chop_power >= 2
+    sorted = my_workers.sort_by(&:id)
+    if sorted.size == 3
+      @helper = sorted.first
+      @inter = sorted[1]
+      @chopper = sorted[2]
+    else
+      sorted.each_with_index do |worker, i|
+        next @helper = worker if i == 0
+
+        if (use_shortscale? && worker.id > 1) || (worker.harvest_power.zero? && worker.carry_capacity >= 2 && worker.move_speed >= 2 && worker.chop_power >= 2)
           @chopper = worker
+          next
         else
           @inter = worker
         end
-      else
-         @cells["#{x} #{y}"].opp_worker = worker
       end
     end
 
