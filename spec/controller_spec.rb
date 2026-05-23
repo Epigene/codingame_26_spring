@@ -3072,6 +3072,50 @@ RSpec.describe Controller, instance_name: :controller do
           is_expected.to eq("MSG trns till PLUM 2; MOVE 0 5 5")
         end
       end
+
+      context "when chooper has ran outside base for some quick chop" do
+        let(:turn) { 2 }
+        let(:input) do
+          <<~INPUT
+            0 0 7 2 0 10
+            0 0 7 2 0 0
+            24
+            PLUM 12 3 4 12 3 0
+            PLUM 11 4 4 12 3 0
+            LEMON 2 7 4 12 3 0
+            LEMON 15 1 4 12 3 0
+            LEMON 16 6 4 12 3 8
+            LEMON 1 2 4 12 3 8
+            LEMON 11 3 4 12 3 3
+            APPLE 16 1 4 20 3 0
+            APPLE 1 7 4 20 3 0
+            APPLE 0 0 4 20 3 3
+            APPLE 17 8 4 20 3 3
+            APPLE 8 8 4 20 3 0
+            APPLE 9 0 4 20 3 0
+            BANANA 9 8 4 6 3 0
+            BANANA 8 0 4 6 3 0
+            BANANA 6 0 4 6 3 0
+            BANANA 11 8 4 6 3 0
+            BANANA 3 1 4 6 3 4
+            BANANA 14 7 4 6 3 4
+            BANANA 12 2 4 6 1 1
+            BANANA 11 2 4 6 1 4
+            BANANA 10 3 3 5 0 2
+            BANANA 5 5 2 4 0 3
+            BANANA 5 6 1 3 0 4
+            4
+            0 0 5 6 1 1 1 1 0 0 0 0 0 0
+            1 1 11 3 1 1 1 1 0 1 0 0 0 0
+            2 0 8 7 2 3 0 3 0 0 0 0 0 0
+            3 1 7 4 2 3 0 3 0 0 0 0 0 3
+          INPUT
+        end
+
+        it "returns a command for chopper to prefer quick-to-chop banana to apple" do
+          is_expected.to contain("MSG beeline; MOVE 2 9 8")
+        end
+      end
     end
 
     # EXAMPLE

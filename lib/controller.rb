@@ -481,7 +481,8 @@ class Controller
 
     # 0, if outside base squares (beelined previously), continue on to nearest grown tree
     if !nodes_within_3_of_camp.include?(worker.node)
-      closest_grown_tree = trees.select(&:grown?).min_by { shortest_path(worker.node, _1.node).size }
+      closest_grown_tree = trees.select(&:grown?).max_by { tree_points_per_turn(_1, worker) }
+
       if closest_grown_tree
         messages << "beeline"
         return go_and_chop(worker, closest_grown_tree.node)
@@ -561,7 +562,7 @@ class Controller
 
     closest_grown_tree = trees
       .select { _1.grown? && _1.node != seed_node }
-      .min_by { shortest_path(worker.node, _1.node).size }
+      .max_by { tree_points_per_turn(_1, worker) }
 
     if closest_grown_tree
       messages << "beeline"
@@ -1426,9 +1427,13 @@ class Controller
 
     # TODO, this will slightly undervalue the tree if it's still growing and would grow during chop
     turns_to_chop = copy.chop_turns(worker.chop_power)
-    turns_to_drop = turns_to_drop(tree.node, worker)
+    turns_to_drop = turns_to_drop_from_node(tree.node, worker)
 
     (tree.size * 4) / (turns_to_reach + turns_to_chop + turns_to_drop).to_f
+  end
+
+  def turns_to_drop_from_node(node, worker)
+    ((shortest_path_to_drop(node).size - 1) / worker.move_speed.to_f).ceil + 1
   end
 
   def turns_to_drop(worker)
