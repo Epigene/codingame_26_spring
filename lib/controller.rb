@@ -701,13 +701,15 @@ class Controller
     if plans.values.any? { _1.node == worker.node }
       # looks like inter will drop, shooing away
       if worker.full? && dropoff_nodes.include?(worker.node)
-        messages << "sidestepping"
+        alternate_dropoff = dropoff_nodes.reject {  node_reserved_by_any_plan?(_1) }
+          .min_by { shortest_path(worker.node, _1).size }
 
-        alternate_dropoff = (dropoff_nodes - [worker.node]).min_by { shortest_path(worker.node, _1).size }
         if alternate_dropoff.nil?
+          messages << "buggering off somewhere"
           return go(worker, grid.neighbors(worker.node).first)
         end
 
+        messages << "sidestepping"
         return go_and_drop(worker, alternate_dropoff)
       end
 
@@ -805,17 +807,37 @@ class Controller
     end
 
     # regular harvesting
-    xms("> regular inter harvesting") do
-      harvest_closest_harvestable(worker)
-      return if plans[worker.id]
+    # xms("> regular inter harvesting") do
+    #   harvest_closest_harvestable(worker)
+    #   return if plans[worker.id]
+    # end
+
+    #== Regular chop-harassing
+    opps_lemontree = trees.select { _1.type?("LEMON") }
+      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node)] }.first
+    if opps_lemontree
+      messages << "hee hee"
+      return go_and_chop(worker, opps_lemontree.node)
     end
+
+    opps_banana = trees.select { _1.type?("BANANA") }
+      .select { shortest_path(opp_camp.node, _1.node).size < 4 }
+      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node)] }.first
+    return go_and_chop(worker, opps_banana.node) if opps_banana
+
+    opps_plum = trees.select { _1.type?("PLUM") }
+      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node)] }.first
+    return go_and_chop(worker, opps_plum.node) if opps_plum
+    #==
 
     if trees.select(&:grown?).none?
       seek_to_self_plant(worker)
       return if plans[worker.id]
     end
 
-    debug("= hmm, inter has nothing to do")
+    debug("XX hmm, inter has nothing to do")
+
+    # TODO, have inter live on opp base corner to be abel to steal
   end
 
   # Regular harvesting for inter

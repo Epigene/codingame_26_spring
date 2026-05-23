@@ -2800,6 +2800,101 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=-3167202023676340000 | nasing spešel field with some dry lemons" do
+      let(:field) do
+        <<~FIELD
+          ~~..............
+          ~~.........+....
+          ~~~.1...........
+          ..~~..#..#....#.
+          .#....#..#..~~..
+          ...........0.~~~
+          ....+.........~~
+          ..............~~
+        FIELD
+      end
+
+      context "when chopper just spawned" do
+        let(:turn) { 77 }
+        let(:input) do
+          <<~INPUT
+            1 2 1 7 1 0
+            8 6 7 7 5 0
+            19
+            PLUM 4 7 4 12 3 0
+            PLUM 11 0 4 12 3 0
+            LEMON 10 5 4 12 2 7
+            LEMON 5 2 4 12 0 1
+            LEMON 13 0 4 12 3 0
+            LEMON 2 7 4 12 3 0
+            LEMON 4 5 4 12 3 0
+            LEMON 11 2 4 12 3 0
+            APPLE 7 7 4 20 3 0
+            APPLE 8 0 4 20 3 0
+            BANANA 11 4 4 6 3 0
+            BANANA 4 3 4 6 3 0
+            BANANA 7 4 4 6 3 0
+            BANANA 8 3 4 6 3 0
+            PLUM 4 1 4 12 0 1
+            PLUM 4 4 4 12 1 1
+            PLUM 12 5 4 12 3 0
+            APPLE 3 2 4 20 3 0
+            APPLE 3 1 4 20 1 1
+            6
+            0 1 4 5 1 1 1 1 0 0 0 0 1 0
+            1 0 11 4 1 1 1 1 0 0 0 0 0 0
+            2 1 5 6 1 1 1 1 0 0 0 0 1 0
+            3 0 10 5 2 2 2 2 0 2 0 0 0 0
+            4 1 4 4 2 2 2 2 0 0 0 0 0 0
+            5 0 11 5 2 4 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter to sidestep to an empty square to drop" do
+          is_expected.to eq("MSG beeline, sidestepping; MOVE 5 10 5; HARVEST 1; MOVE 3 11 6")
+        end
+      end
+
+      context "when inter has wondered off to previously gather" do
+        let(:turn) { 96 }
+        let(:input) do
+          <<~INPUT
+            5 4 1 7 1 8
+            1 5 0 11 2 4
+            16
+            PLUM 4 7 4 12 3 0
+            PLUM 11 0 4 12 3 0
+            LEMON 5 2 4 12 0 5
+            LEMON 13 0 4 12 3 0
+            LEMON 2 7 4 12 3 0
+            LEMON 4 5 4 12 2 3
+            APPLE 7 7 4 20 3 0
+            APPLE 8 0 4 20 3 0
+            BANANA 11 4 4 6 3 3
+            BANANA 8 3 4 6 3 0
+            PLUM 4 1 4 12 3 5
+            PLUM 4 4 4 12 2 7
+            PLUM 12 5 4 12 2 3
+            APPLE 3 2 4 20 3 0
+            APPLE 3 1 4 20 3 0
+            BANANA 11 3 3 5 0 1
+            7
+            0 1 4 4 1 1 1 1 0 0 0 0 0 0
+            1 0 10 4 1 1 1 1 0 0 0 1 0 0
+            2 1 10 3 1 1 1 1 0 0 0 0 0 1
+            3 0 7 6 2 2 2 2 0 0 0 0 0 0
+            4 1 4 3 2 2 2 2 2 0 0 0 0 0
+            5 0 10 5 2 4 0 3 0 0 0 0 0 1
+            6 1 5 2 2 2 2 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter to go chop off lemons" do
+          is_expected.to eq("MSG hee hee; DROP 5; PLANT 1 BANANA; MOVE 3 7 4")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
