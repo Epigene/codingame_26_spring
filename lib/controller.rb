@@ -625,6 +625,7 @@ class Controller
         ) ||
         (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
         (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
+        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_initial_fruit(worker, "APPLE", 2)) ||
         (my_inventory.iron < aimed_chopper_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
         (
           my_inventory.lemon >= aimed_chopper_cost["LEMON"] && my_inventory.plum >= aimed_chopper_cost["PLUM"] &&
@@ -633,7 +634,9 @@ class Controller
         (inter && (turns_till_chopper < 15) && seek_to_plant_banana(worker)) ||
         (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
         (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
-        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
+        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 10)) ||
+        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 10)) ||
+        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 10)) ||
         (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) # TODO, may need to detect inter already grabbing last piece
 
       debug("= not clear how helper could help scale to chopper!") if plans[worker.id].nil?
@@ -840,7 +843,7 @@ class Controller
     # TODO, have inter live on opp base corner to be abel to steal
   end
 
-  # Regular harvesting for inter
+  # Regular harvesting for inter, but chopping is preferred
   def harvest_closest_harvestable(worker, except_nodes=[])
     closest_harvestable_tree = trees.select do |tree|
       next false if except_nodes.include?(tree.node)
