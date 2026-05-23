@@ -349,6 +349,7 @@ class Grid
     result
   end
 
+  # @param range Range
   def cells_at_diagonal_distance(node, range)
     diagonal_as_direct_ranges = range.map { (_1 * 2)..(_1 * 2) }
 
