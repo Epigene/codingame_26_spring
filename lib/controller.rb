@@ -8,6 +8,10 @@ Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
     send(type.to_s.downcase).positive?
   end
 
+  def any_fruit?
+    has?("PLUM") || has?("LEMON") || has?("APPLE") || has?("BANANA")
+  end
+
   def can_afford?(cost_hash)
     cost_hash.all? { |type, count| send(type.downcase) >= count }
   end
