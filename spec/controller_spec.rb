@@ -3039,6 +3039,123 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=-5123075324526560000" do
+      let(:field) do
+        <<~FIELD
+          ....#.............
+          .#.+.....~~~...#..
+          #..#.0.#.~~~......
+          .......~~~~~..#...
+          .......~~~~.......
+          ...#..~~~~~.......
+          ......~~~.#.1.#..#
+          ..#...~~~.....+.#.
+          .............#....
+        FIELD
+      end
+
+      context "when a godd chopper was just trained and we're ahead in terms of best carry" do
+        let(:turn) { 23 }
+        let(:input) do
+          <<~INPUT
+            5 0 9 2 0 0
+            3 6 6 2 4 0
+            26
+            PLUM 4 2 4 12 3 0
+            PLUM 13 6 4 12 3 0
+            PLUM 3 4 4 12 3 5
+            PLUM 14 4 4 12 3 5
+            PLUM 16 4 4 12 2 5
+            PLUM 1 4 4 12 2 5
+            LEMON 4 8 4 12 3 0
+            LEMON 13 0 4 12 3 0
+            APPLE 1 5 4 20 3 0
+            APPLE 16 3 4 20 3 0
+            APPLE 2 4 4 20 0 1
+            APPLE 15 4 4 20 0 1
+            APPLE 16 1 4 20 2 9
+            APPLE 1 7 4 20 2 9
+            BANANA 9 8 4 6 1 6
+            BANANA 8 0 4 6 1 6
+            BANANA 9 7 4 6 3 0
+            BANANA 8 1 4 6 3 0
+            BANANA 0 5 4 6 3 0
+            BANANA 17 3 4 6 3 0
+            APPLE 12 5 3 17 0 8
+            APPLE 11 6 2 14 0 3
+            LEMON 11 5 4 12 1 3
+            LEMON 12 7 2 8 0 5
+            PLUM 12 4 1 6 0 4
+            BANANA 13 5 1 3 0 6
+            4
+            0 0 4 2 1 1 1 1 0 0 0 1 0 0
+            1 1 13 5 1 1 1 1 0 0 0 0 0 0
+            2 1 12 4 2 1 1 0 1 0 0 0 0 0
+            3 0 5 2 2 3 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for chopper to go kill opp's wet lemon" do
+          # helper here should eventually be made to plant bananas in my side of map, not so much on seed
+          is_expected.to start_with("MSG hee hee; MOVE 3 5 0;")
+        end
+      end
+    end
+
+    context "with seed=-2707906601789800000 | iron and water nearby, decent for scale, but no plants nearby" do
+      let(:field) do
+        <<~FIELD
+          .....~~~~~~~~..##.....
+          ...~~~~+~~~~..1......#
+          ...~~~~.~~~~.......~.~
+          ...~~~~.~~~~..+....~~~
+          ...~~~~..~~....#....~~
+          .....~..........~.....
+          ~~....#....~~..~~~~...
+          ~~~....+..~~~~.~~~~...
+          ~.~.......~~~~.~~~~...
+          #......0..~~~~+~~~~...
+          .....##..~~~~~~~~.....
+        FIELD
+      end
+
+      context "when I have more workers and inter should go hobble lemons" do
+        let(:turn) { 10 }
+        let(:input) do
+          <<~INPUT
+            3 0 2 2 8 0
+            7 1 4 2 10 0
+            17
+            PLUM 7 3 4 12 3 0
+            PLUM 14 7 4 12 3 0
+            PLUM 19 5 4 12 1 3
+            PLUM 2 5 4 12 1 3
+            LEMON 2 6 4 12 3 2
+            LEMON 19 4 4 12 3 0
+            APPLE 1 0 3 17 0 8
+            APPLE 20 10 3 17 0 8
+            BANANA 19 1 4 6 1 4
+            BANANA 2 9 4 6 1 4
+            BANANA 13 2 3 5 0 6
+            BANANA 8 8 3 5 0 6
+            PLUM 13 1 1 6 0 1
+            PLUM 9 9 3 10 0 3
+            PLUM 13 0 2 8 0 2
+            LEMON 12 1 1 6 0 3
+            LEMON 6 7 1 6 0 8
+            3
+            0 0 9 9 1 1 1 1 0 0 0 0 0 0
+            1 1 12 1 1 1 1 1 0 0 0 0 0 0
+            2 0 6 7 2 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for inter to go for opp's wet lemon" do
+          is_expected.to eq("MSG trns till PLUM 7, hee hee; MOVE 0 9 9; MOVE 2 7 8")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

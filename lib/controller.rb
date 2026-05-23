@@ -479,14 +479,47 @@ class Controller
     chop_wars(worker)
     return if plans[worker.id]
 
-    # 0, if outside base squares (beelined previously), continue on to nearest grown tree
-    if !nodes_within_3_of_camp.include?(worker.node)
-      closest_grown_tree = trees.select(&:grown?).min_by { shortest_path(worker.node, _1.node).size }
-      if closest_grown_tree
-        messages << "beeline"
-        return go_and_chop(worker, closest_grown_tree.node)
+    # OPP HOBBLING
+    if inter.nil? && chopper.carry_capacity > workers.select { !_1.my? }.max_by(&:carry_capacity).carry_capacity
+      debug("- chopper checking need to eliminte opp's lemons")
+
+      opps_wet_lemontree, _dist = trees.select { _1.type?("LEMON") }.select { wet_nodes.include?(_1.node) }
+        .map do |tree|
+          [
+            tree,
+            shortest_path(opp_camp.node, tree.node).size - 1
+          ]
+        end
+        .select { |tree, dist_from_opp| dist_from_opp <= 3 }
+        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
+      if opps_wet_lemontree
+        messages << "hee hee"
+        return go_and_chop(worker, opps_wet_lemontree.node)
+      end
+
+      opps_dry_lemontree, _dist = trees.select { _1.type?("LEMON") }
+        .map do |tree|
+          [
+            tree,
+            shortest_path(opp_camp.node, tree.node).size - 1
+          ]
+        end
+        .select { |tree, dist_from_opp| dist_from_opp <= 3 }
+        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
+      if opps_dry_lemontree
+        messages << "hee hee"
+        return go_and_chop(worker, opps_dry_lemontree.node)
       end
     end
+
+    # 0, if outside base squares (beelined previously), continue on to nearest grown tree
+    # if !nodes_within_3_of_camp.include?(worker.node)
+    #   closest_grown_tree = trees.select(&:grown?).min_by { shortest_path(worker.node, _1.node).size }
+    #   if closest_grown_tree
+    #     messages << "beeline"
+    #     return go_and_chop(worker, closest_grown_tree.node)
+    #   end
+    # end
 
     # 0, ENDGAME CLEAR
     if turn > 287
@@ -763,6 +796,39 @@ class Controller
       return if plans[worker.id]
     end
 
+    # OPP HOBBLING
+    if my_workers.size > workers.select { !_1.my? }.size
+      debug("- inter checking need to eliminte opp's lemons")
+
+      opps_wet_lemontree, _dist = trees.select { _1.type?("LEMON") }.select { wet_nodes.include?(_1.node) }
+        .map do |tree|
+          [
+            tree,
+            shortest_path(opp_camp.node, tree.node).size - 1
+          ]
+        end
+        .select { |tree, dist_from_opp| dist_from_opp <= 3 }
+        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
+      if opps_wet_lemontree
+        messages << "hee hee"
+        return go_and_chop(worker, opps_wet_lemontree.node)
+      end
+
+      opps_dry_lemontree, _dist = trees.select { _1.type?("LEMON") }
+        .map do |tree|
+          [
+            tree,
+            shortest_path(opp_camp.node, tree.node).size - 1
+          ]
+        end
+        .select { |tree, dist_from_opp| dist_from_opp <= 3 }
+        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
+      if opps_dry_lemontree
+        messages << "hee hee"
+        return go_and_chop(worker, opps_dry_lemontree.node)
+      end
+    end
+
     # ENDGAME, I'm winning, let's liquidate
     xms("> inter endgame") do
       if my_inventory.score > opp_inventory.score + 40 && trees.size < 6
@@ -847,7 +913,7 @@ class Controller
 
     #== Regular chop-harassing
     opps_lemontree = trees.select { _1.type?("LEMON") }
-      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node)] }.first
+      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node).size] }.first
     if opps_lemontree
       messages << "hee hee"
       return go_and_chop(worker, opps_lemontree.node)
@@ -855,11 +921,11 @@ class Controller
 
     opps_banana = trees.select { _1.type?("BANANA") }
       .select { shortest_path(opp_camp.node, _1.node).size < 4 }
-      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node)] }.first
+      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node).size] }.first
     return go_and_chop(worker, opps_banana.node) if opps_banana
 
     opps_plum = trees.select { _1.type?("PLUM") }
-      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node)] }.first
+      .sort_by { [shortest_path(opp_camp.node, _1.node).size, shortest_path(worker.node, _1.node).size] }.first
     return go_and_chop(worker, opps_plum.node) if opps_plum
     #==
 
