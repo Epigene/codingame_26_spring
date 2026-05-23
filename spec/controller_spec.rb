@@ -2800,6 +2800,86 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with plum in hand" do
+      let(:field) do
+        <<~FIELD
+          ......+..0......
+          .......#.....~~~
+          ...~.#..#..~~~~~
+          ..~~~......+~~~~
+          ~~~~+......~~~..
+          ~~~~~..#..#.~...
+          ~~~.....#.......
+          ......1..+......
+        FIELD
+      end
+
+      context "when inter just dropped a lemon" do
+        let(:turn) { 17 }
+        let(:input) do
+          <<~INPUT
+            4 1 1 7 1 0
+            5 0 5 7 1 3
+            15
+            PLUM 10 4 4 12 3 0
+            PLUM 5 3 4 10 3 0
+            PLUM 10 1 4 12 0 3
+            PLUM 15 0 4 12 3 0
+            PLUM 0 7 4 12 3 0
+            LEMON 2 2 4 12 3 0
+            LEMON 13 5 4 12 3 0
+            APPLE 15 7 4 20 3 0
+            APPLE 0 0 4 20 3 0
+            APPLE 9 2 4 20 2 4
+            APPLE 6 5 4 20 2 4
+            APPLE 4 7 4 20 1 7
+            APPLE 11 0 4 20 1 7
+            BANANA 8 1 4 6 3 0
+            LEMON 9 1 1 6 0 3
+            4
+            0 1 5 3 1 1 1 1 0 0 0 0 0 0
+            1 0 10 0 1 1 1 1 1 0 0 0 0 0
+            2 1 9 1 2 2 0 2 0 0 0 0 0 0
+            3 0 10 3 3 2 2 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for helper to drop the carried plum" do
+          is_expected.to include("DROP 1")
+        end
+      end
+
+      context "when inter just reached an iron mine" do
+        let(:turn) { 70 }
+        let(:input) do
+          <<~INPUT
+            7 13 2 7 3 6
+            5 0 5 7 1 11
+            10
+            PLUM 15 0 4 12 3 0
+            LEMON 2 2 4 12 3 0
+            LEMON 13 5 4 12 3 0
+            APPLE 15 7 4 20 3 0
+            APPLE 0 0 4 20 3 0
+            APPLE 9 2 4 20 3 0
+            APPLE 6 5 4 20 3 0
+            APPLE 4 7 4 4 3 0
+            APPLE 11 0 4 20 3 0
+            LEMON 11 1 4 12 0 2
+            4
+            0 1 4 7 1 1 1 1 0 0 0 0 0 0
+            1 0 11 1 1 1 1 1 0 1 0 0 0 0
+            2 1 6 6 2 2 0 2 0 0 0 0 0 2
+            3 0 10 3 3 2 2 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        xit "returns a command for inter to mine rather than rush back for 1 lemon" do
+          is_expected.to include("MINE 3")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

@@ -969,6 +969,10 @@ class Controller
 
     return if expected_lemon_production_near_camp_per_turn >= (2/8.0) # one watered or 2 regular
 
+    if worker.full? && !worker.carrying?("LEMON")
+      return go_and_drop(worker, closest_dropoff(worker.node))
+    end
+
     wet_path = wet_nodes_within_3_of_camp
       # clear of trees
       .select { cells[_1].nil? || cells[_1].tree.nil? }
@@ -999,6 +1003,10 @@ class Controller
     debug "= Eventual Plum production near camp per turn #{expected_plum_production_near_camp_per_turn}"
 
     return if expected_plum_production_near_camp_per_turn >= (1/8.0) # one tree on any wetness is sufficient
+
+    if worker.full? && !worker.carrying?("PLUM")
+      return go_and_drop(worker, closest_dropoff(worker.node))
+    end
 
     wet_path = wet_nodes_within_3_of_camp.select { cells[_1].nil? || cells[_1].tree.nil? }
       .map { shortest_path(my_camp.node, _1) }
