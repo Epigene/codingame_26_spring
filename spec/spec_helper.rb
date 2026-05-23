@@ -17,4 +17,7 @@ RSpec.configure do |config|
   end
 end
 
+RSpec::Matchers.alias_matcher :contain, :include
+
 RSpec::Matchers.define_negated_matcher :not_change, :change
+RSpec::Matchers.define_negated_matcher :exclude, :include
