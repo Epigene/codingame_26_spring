@@ -2895,6 +2895,62 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=5774317116214727000 | nasing spešel quite close opp" do
+      let(:field) do
+        <<~FIELD
+          ~~~~..#..~..........
+          ...~~...~~..+.......
+          ..~~....~~...1.+....
+          ...~~~..~~..........
+          #..~~~......#...~...
+          ...~...#......~~~..#
+          ..........~~..~~~...
+          ....+.0...~~....~~..
+          .......+..~~...~~...
+          ..........~..#..~~~~
+        FIELD
+      end
+
+      context "when turn 40 and unlikely to bootstrap new lemontrees" do
+        let(:turn) { 40 }
+        let(:input) do
+          <<~INPUT
+            10 9 9 9 10 1
+            0 2 4 9 1 4
+            20
+            PLUM 5 1 4 12 3 0
+            PLUM 14 8 4 12 3 0
+            PLUM 18 8 4 12 3 0
+            PLUM 1 1 4 12 3 0
+            LEMON 2 9 4 12 3 0
+            LEMON 17 0 4 12 3 0
+            LEMON 18 5 4 12 3 0
+            LEMON 1 4 4 12 3 0
+            LEMON 1 8 4 12 3 0
+            LEMON 18 1 4 12 3 0
+            APPLE 14 9 4 20 3 3
+            APPLE 5 0 4 20 3 3
+            APPLE 9 4 4 20 3 0
+            APPLE 10 5 4 20 3 0
+            APPLE 13 5 4 20 3 0
+            BANANA 3 9 4 6 3 0
+            BANANA 16 0 4 6 3 0
+            BANANA 10 2 4 6 3 0
+            PLUM 13 4 3 10 0 3
+            PLUM 13 3 2 8 0 8
+            3
+            0 0 5 7 1 1 1 1 0 0 0 0 0 0
+            1 1 14 8 1 1 1 1 0 0 0 0 0 0
+            2 1 11 2 3 2 2 2 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns a command to just go get lemon and iron, not bother with plant" do
+          is_expected.to eq("MOVE 0 5 8")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
