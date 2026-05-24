@@ -486,6 +486,39 @@ class Controller
   end
 
   def organize_chopping(worker)
+    # OPP HOBBLING, comes before unloading wood
+    if inter.nil? && chopper.carry_capacity > workers.select { !_1.my? }.max_by(&:carry_capacity).carry_capacity
+      debug("- chopper checking need to eliminte opp's lemons")
+
+      opps_wet_lemontree, _dist = trees.select { _1.type?("LEMON") }
+        .select { wet_nodes_within_3_of_opp_camp.include?(_1.node) }
+        .map do |tree|
+          [
+            tree,
+            tree.turns_till_fruit_in_hand(worker, shortest_path(worker.node, tree.node))
+          ]
+        end
+        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
+      if opps_wet_lemontree
+        messages << "hee hee"
+        return go_and_chop(worker, opps_wet_lemontree.node)
+      end
+
+      opps_dry_lemontree, _dist = trees.select { _1.type?("LEMON") }
+        .select { nodes_within_3_of_opp_camp.include?(_1.node) }
+        .map do |tree|
+          [
+            tree,
+            tree.turns_till_fruit_in_hand(worker, shortest_path(worker.node, tree.node))
+          ]
+        end
+        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
+      if opps_dry_lemontree
+        messages << "hee hee"
+        return go_and_chop(worker, opps_dry_lemontree.node)
+      end
+    end
+
     # 0. unload if carrying wood for some reason
     if (trees.any?(&:grown?) ? worker.carry_wood.positive? : worker.full?) || (worker.full? && worker.carry_iron.positive?)
       return go_and_drop(worker, closest_dropoff(worker.node))
@@ -494,39 +527,6 @@ class Controller
     # WAR, seek to fight over chopping if opp within 2 turns can be cought
     chop_wars(worker)
     return if plans[worker.id]
-
-    # OPP HOBBLING
-    if inter.nil? && chopper.carry_capacity > workers.select { !_1.my? }.max_by(&:carry_capacity).carry_capacity
-      debug("- chopper checking need to eliminte opp's lemons")
-
-      opps_wet_lemontree, _dist = trees.select { _1.type?("LEMON") }.select { wet_nodes.include?(_1.node) }
-        .map do |tree|
-          [
-            tree,
-            shortest_path(opp_camp.node, tree.node).size - 1
-          ]
-        end
-        .select { |tree, dist_from_opp| dist_from_opp <= 3 }
-        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
-      if opps_wet_lemontree
-        messages << "hee hee"
-        return go_and_chop(worker, opps_wet_lemontree.node)
-      end
-
-      opps_dry_lemontree, _dist = trees.select { _1.type?("LEMON") }
-        .map do |tree|
-          [
-            tree,
-            shortest_path(opp_camp.node, tree.node).size - 1
-          ]
-        end
-        .select { |tree, dist_from_opp| dist_from_opp <= 3 }
-        .sort_by { |tree, dist_from_opp| [dist_from_opp, shortest_path(worker.node, tree.node).size] }.first
-      if opps_dry_lemontree
-        messages << "hee hee"
-        return go_and_chop(worker, opps_dry_lemontree.node)
-      end
-    end
 
     # 0, if outside base squares (beelined previously), continue on to nearest grown tree
     # if !nodes_within_3_of_camp.include?(worker.node)
@@ -1663,11 +1663,13 @@ class Controller
   def use_shortscale?
     return @use_shortscale if defined?(@use_shortscale)
 
-    @use_shortscale = (wet_nodes_within_3_of_camp.size == 0) ||
-      (turn > 10 && wet_nodes_within_3_of_opp_camp.none? { cells[_1]&.tree&.type?("LEMON") } )
 
-     # TODO, gotta see how neighbor limit affects score
-    #|| (grid.neighbors(my_camp.node).size == 1)
+    @use_shortscale = (wet_nodes_within_3_of_camp.size == 0)
+
+    # || (turn > 10 && wet_nodes_within_3_of_opp_camp.none? { cells[_1]&.tree&.type?("LEMON") } )
+
+    # TODO, gotta see how neightbor limit affects score
+    # || (grid.neighbors(my_camp.node).size == 1)
   end
 
   # Predictions for which chopper to aim for.
@@ -1843,6 +1845,7 @@ class Controller
 
     ms(">> wet node init") { wet_nodes_within_3_of_camp }
     ms(">> INIT opp node") { nodes_within_3_of_opp_camp }
+    ms(">> seed note init") { seed_node }
 
     ms(">> INIT #my_nodes") do
       grass_nodes.each do |grass_node|
@@ -1978,7 +1981,7 @@ class Controller
     @nodes_within_3_of_camp_except_seed ||= nodes_within_3_of_camp - [seed_node]
   end
 
-  #== OPP nodes ==
+  # == OPP nodes ==
 
   def wet_nodes_within_3_of_opp_camp
     @wet_nodes_within_3_of_opp_camp ||= nodes_within_3_of_opp_camp & wet_nodes
@@ -1989,6 +1992,8 @@ class Controller
       shortest_path(opp_camp.node, grass_node).size <= 4
     end.to_set
   end
+
+  # ==
 
   def node_secluded?(node)
     distance_between_camps + 10 < (shortest_path(opp_camp.node, node).size - 1)
