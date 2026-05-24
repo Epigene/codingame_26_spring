@@ -3505,6 +3505,59 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=" do
+      let(:field) do
+        <<~FIELD
+          .+.....~~.....#....~~~
+          .......~~.#........~..
+          ...................~..
+          .............1.....~..
+          .~....#............~~.
+          .~...+..........+...~.
+          .~~............#....~.
+          ..~.....0.............
+          ..~...................
+          ..~........#.~~.......
+          ~~~....#.....~~.....+.
+        FIELD
+      end
+
+      context "when " do
+        let(:turn) { 2 }
+        let(:input) do
+          <<~INPUT
+            2 2 1 1 1 0
+            7 4 2 2 6 0
+            16
+            PLUM 9 8 4 12 0 5
+            PLUM 12 2 4 12 0 5
+            PLUM 19 8 4 12 0 3
+            PLUM 2 2 4 12 0 3
+            PLUM 11 10 1 6 0 1
+            PLUM 10 0 1 6 0 1
+            LEMON 5 10 2 8 0 6
+            LEMON 16 0 2 8 0 6
+            LEMON 4 5 2 8 0 6
+            LEMON 17 5 2 8 0 6
+            LEMON 20 7 4 12 3 2
+            LEMON 1 3 4 12 3 2
+            APPLE 7 5 4 20 0 1
+            APPLE 14 5 4 20 0 1
+            BANANA 16 3 4 6 2 5
+            BANANA 5 7 4 6 2 5
+            3
+            0 0 7 7 1 1 1 1 0 0 0 1 0 0
+            1 1 14 4 1 1 1 1 0 0 0 0 0 0
+            2 0 6 7 2 1 0 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns " do
+          is_expected.to eq("TODO")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do

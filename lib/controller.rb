@@ -1826,6 +1826,11 @@ class Controller
       @cells["#{x} #{y}"].tree = tree
     end
 
+    # clearing before each move
+    @helper = nil
+    @inter = nil
+    @chopper = nil
+
     @workers = []
     lines.shift.to_i.times do
       id, player, x, y, move_speed, carry_capacity, harvest_power, chop_power, carry_plum, carry_lemon, carry_apple, carry_banana, carry_iron, carry_wood = lines.shift.split.map(&:to_i)
