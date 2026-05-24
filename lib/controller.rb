@@ -1733,8 +1733,8 @@ class Controller
       if use_shortscale?
         existing = my_workers.size
 
-        move = my_inventory.best_affordable_train_tier("PLUM", 3, existing)
-        carry = my_inventory.best_affordable_train_tier("LEMON", 3, existing)
+        move = [my_inventory.best_affordable_train_tier("PLUM", 3, existing), 1].max
+        carry = [my_inventory.best_affordable_train_tier("LEMON", 3, existing), 1].max
         # chop needs to be at least as strong as opp's
         chop = workers.select { !_1.my? }.map(&:chop_power).max
 
