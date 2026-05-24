@@ -330,7 +330,7 @@ Prediction = Struct.new(:move, :carry, :harvest, :chop, :costs, :turns, :remaini
 
   # Exponential scaling makes faraway turns be more punishing than near ones
   def turn_adjusted_value
-    (grand_total - 0.15*(turns**1.25)).round
+    (grand_total - 0.15*(turns**1.30)).round
   end
 
   # key value, tells plan's worth.
