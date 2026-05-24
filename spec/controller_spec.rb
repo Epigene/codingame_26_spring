@@ -3156,6 +3156,62 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=-2196192594553130000 | battling against legend1 yaichi" do
+      let(:field) do
+        <<~FIELD
+          .....~~~..1....~.#..
+          ......~~~....~~~....
+          .....#..........+...
+          .#...#..........#...
+          ....................
+          ....................
+          ...#..........#...#.
+          ...+..........#.....
+          ....~~~....~~~......
+          ..#.~....0..~~~.....
+        FIELD
+      end
+
+      context "when yaichi has come across to chopp our lemon and has none of his own" do
+        let(:turn) { 1 }
+        let(:input) do
+          <<~INPUT
+            5 7 2 6 3 0
+            2 3 6 4 0 0
+            19
+            PLUM 6 6 4 12 1 8
+            PLUM 13 3 4 12 3 0
+            LEMON 6 2 4 12 3 0
+            LEMON 13 7 4 12 3 0
+            APPLE 11 2 4 20 3 0
+            APPLE 8 7 4 20 3 0
+            APPLE 0 2 4 20 3 3
+            APPLE 19 7 4 20 3 3
+            APPLE 12 6 4 20 3 3
+            APPLE 7 3 4 20 3 3
+            BANANA 1 6 4 6 3 0
+            BANANA 18 3 4 6 3 0
+            BANANA 7 9 4 6 3 0
+            BANANA 12 0 4 6 3 0
+            BANANA 12 4 4 6 3 0
+            BANANA 7 5 4 6 3 0
+            LEMON 11 9 4 12 2 2
+            PLUM 10 8 4 12 3 0
+            BANANA 11 0 1 3 0 4
+            4
+            0 0 10 9 1 1 1 1 0 0 0 0 0 0
+            1 1 11 1 1 1 1 1 0 0 0 1 0 0
+            2 0 6 6 2 2 2 1 1 0 0 0 0 0
+            3 1 11 9 2 2 0 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for helper to ignore lemons, we need plums (and apples)" do
+          is_expected.to start_with("MSG trns till PLUM 2; MOVE 0 10 8;")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
