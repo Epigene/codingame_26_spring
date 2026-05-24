@@ -3357,6 +3357,154 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "with seed=7864947342718522000 | nice space on safe side with water and iron" do
+      let(:field) do
+        <<~FIELD
+          ......#........~~~
+          ...............~~.
+          .............1..~.
+          ...............+..
+          ...+..........+...
+          ..+...............
+          .~..0.............
+          .~~...............
+          ~~~........#......
+        FIELD
+      end
+
+      context "when its the first move and definitely no need to make an inter/chopper just yet" do
+        let(:turn) { 1 }
+        let(:input) do
+          <<~INPUT
+            8 5 6 8 6 0
+            8 5 6 8 6 0
+            12
+            PLUM 5 3 4 12 0 2
+            PLUM 12 5 4 12 0 2
+            PLUM 3 1 1 6 0 6
+            PLUM 14 7 1 6 0 6
+            LEMON 7 4 4 12 2 3
+            LEMON 10 4 4 12 2 3
+            APPLE 1 3 1 11 0 2
+            APPLE 16 5 1 11 0 2
+            BANANA 11 0 2 4 0 3
+            BANANA 6 8 2 4 0 3
+            BANANA 9 6 1 3 0 1
+            BANANA 8 2 1 3 0 1
+            2
+            0 0 4 6 1 1 1 1 0 0 0 0 0 0
+            1 1 13 2 1 1 1 1 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to hold off on inter training since getting some more iron is easy" do
+          is_expected.to eq("MOVE 0 3 6")
+        end
+      end
+
+      context "when opp has trained a decent, but unscaled chopper" do
+        let(:turn) { 3 }
+        let(:input) do
+          <<~INPUT
+            8 5 6 8 6 0
+            3 0 5 7 1 0
+            12
+            PLUM 5 3 4 12 1 8
+            PLUM 12 5 4 12 1 8
+            PLUM 3 1 1 6 0 4
+            PLUM 14 7 1 6 0 4
+            LEMON 7 4 4 12 2 1
+            LEMON 10 4 4 12 2 1
+            APPLE 1 3 2 14 0 9
+            APPLE 16 5 2 14 0 9
+            BANANA 11 0 2 4 0 1
+            BANANA 6 8 2 4 0 1
+            BANANA 9 6 2 4 0 5
+            BANANA 8 2 2 4 0 5
+            3
+            0 0 3 5 1 1 1 1 0 0 0 0 0 0
+            1 1 12 2 1 1 1 1 0 0 0 1 0 0
+            2 1 12 3 2 2 0 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to just mine up iron and got for 2 2 0 3 shortscaled chopper" do
+          is_expected.to eq("MINE 0")
+          expect(controller.send(:best_prediction)&.name).to eq("2 2 0 3")
+        end
+      end
+
+      context "SYNTH when opp has trained a decent, but unscaled chopper, abd I can reach next move tier with just 1 plum" do
+        let(:turn) { 3 }
+        let(:input) do
+          <<~INPUT
+            9 5 6 8 6 0
+            3 0 5 7 1 0
+            12
+            PLUM 5 3 4 12 1 8
+            PLUM 12 5 4 12 1 8
+            PLUM 3 1 1 6 0 4
+            PLUM 14 7 1 6 0 4
+            LEMON 7 4 4 12 2 1
+            LEMON 10 4 4 12 2 1
+            APPLE 1 3 2 14 0 9
+            APPLE 16 5 2 14 0 9
+            BANANA 11 0 2 4 0 1
+            BANANA 6 8 2 4 0 1
+            BANANA 9 6 2 4 0 5
+            BANANA 8 2 2 4 0 5
+            3
+            0 0 3 5 1 1 1 1 0 0 0 0 0 0
+            1 1 12 2 1 1 1 1 0 0 0 1 0 0
+            2 1 12 3 2 2 0 2 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command to go grab the last needed plum" do
+          is_expected.to eq("MSG trns till PLUM 5; MOVE 0 4 5")
+          expect(controller.send(:best_prediction)&.name).to eq("3 2 0 3")
+        end
+      end
+
+      context "when chopping along and best tree is an ungrown banana, but this is fine bacause our carry is only 2" do
+        let(:turn) { 277 }
+        let(:input) do
+          <<~INPUT
+            3 0 5 3 0 96
+            3 0 5 0 1 97
+            18
+            PLUM 14 7 4 12 3 0
+            LEMON 10 4 4 12 3 0
+            APPLE 1 3 4 20 3 0
+            APPLE 16 5 4 20 3 0
+            BANANA 11 0 4 6 3 0
+            BANANA 9 6 4 6 3 0
+            BANANA 12 1 4 6 3 5
+            BANANA 13 0 4 6 3 0
+            BANANA 3 7 4 6 3 1
+            BANANA 14 0 4 6 3 0
+            BANANA 12 0 4 6 3 0
+            BANANA 14 1 4 6 3 0
+            BANANA 11 1 4 6 0 1
+            BANANA 4 7 2 4 0 1
+            BANANA 11 2 2 4 0 2
+            BANANA 2 6 2 4 0 2
+            BANANA 12 3 1 3 0 2
+            BANANA 3 8 1 3 0 3
+            4
+            0 0 3 7 1 1 1 1 0 0 0 0 0 0
+            1 1 12 1 1 1 1 1 0 0 0 0 0 0
+            2 1 12 2 2 2 0 2 0 0 0 0 0 2
+            3 0 3 6 2 2 0 3 0 0 0 0 0 0
+          INPUT
+        end
+
+        it "returns a command for chopper to just go chop size 3 banana next to seed" do
+          is_expected.to start_with("MOVE 3 4 7;")
+        end
+      end
+    end
+
     # EXAMPLE
     context "with seed=" do
       let(:field) do
