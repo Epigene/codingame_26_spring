@@ -1219,16 +1219,18 @@ class Controller
 
   # a generic going. Checks about having reached should occur beforehand in callers.
   def go(worker, node)
-    excludable =
-      if worker.id == chopper&.id
-        nil
-      else
-        plans[chopper&.id]&.node
-      end
+    path = shortest_path(worker.node, node)
+    target = path[worker.move_speed] || path.last
 
-    path =
-      shortest_path(worker.node, node, excluding: excludable ? [excludable] : nil) ||
-      shortest_path(worker.node, node)
+    if node_reserved_by_any_plan?(target)
+      alternate_path = shortest_path(worker.node, node, excluding: [target])
+      if alternate_path
+        debug ">> go target taken, rerouted"
+        path = alternate_path
+      else
+        debug "XX go target taken, no reroute possible!"
+      end
+    end
 
     plans[worker.id] = Plan.new("MOVE", worker.id, nil, path[worker.move_speed] || path.last)
   end
@@ -1466,7 +1468,7 @@ class Controller
   # Nodes are reserved by many things. Moving targeting the node or stationary operations remining on the node
   def node_reserved_by_any_plan?(node)
     plans.values.any? do |plan|
-      # as in moving elsewhere
+      # as in moving and will take up target node
       return true if plan.node == node
 
       # otherwise worker will remain stationary and reserves current node for next turn also
@@ -1807,33 +1809,15 @@ class Controller
       @helper = sorted.first
       @inter = sorted[1]
       @chopper = sorted[2]
-    else # having some trouble differentiating chopper from inter.
+    else
       sorted.each_with_index do |worker, i|
         next @helper = worker if i == 0
 
-        # chopper will amost never have chop power of 1
-        if i == 1 && worker.chop_power == 1
+        # chopper will never have harvest power, but intern will
+        if i == 1 && worker.harvest_power > 0
           @inter = worker
-          next
-        end
-
-        # inter carry is capped at 2, so larger 100% is chopper
-        if i == 1 && worker.carry_capacity > 2
-          @chopper = worker
-          next
-        end
-
-        # as in we're likely scaling up
-        if i == 1 && my_inventory.iron >= 2
-          @inter = worker
-          next
-        end
-
-        if (use_shortscale? && worker.id > 1) || (worker.harvest_power.zero? && worker.carry_capacity >= 2 && worker.move_speed >= 2 && worker.chop_power >= 2)
-          @chopper = worker
-          next
         else
-          @inter = worker
+          @chopper = worker
         end
       end
     end
