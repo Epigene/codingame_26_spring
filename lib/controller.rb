@@ -486,8 +486,20 @@ class Controller
   end
 
   def organize_chopping(worker)
+    # interrupt hobbling if full of wood and their seed trees will take time to grow
+    if worker.carry_wood.positive? && worker.full?
+      turns_till_opp_lemon =
+        trees.select { _1.type?("LEMON") }
+        .select { nodes_within_3_of_opp_camp.include?(_1.node) }
+        .map { _1.turns_till_fruit }.min
+
+      if turns_till_opp_lemon.nil? || turns_till_opp_lemon > 12
+        return go_and_drop(worker, closest_dropoff(worker.node))
+      end
+    end
+
     # OPP HOBBLING, comes before unloading wood
-    if inter.nil? && chopper.carry_capacity > workers.select { !_1.my? }.max_by(&:carry_capacity).carry_capacity
+    if inter.nil? && (my_workers.size >= workers.select { !_1.my? }.size) && chopper.carry_capacity > workers.select { !_1.my? }.max_by(&:carry_capacity).carry_capacity
       debug("- chopper checking need to eliminte opp's lemons")
 
       opps_wet_lemontree, _dist = trees.select { _1.type?("LEMON") }
@@ -1781,6 +1793,12 @@ class Controller
         # chopper will amost never have chop power of 1
         if i == 1 && worker.chop_power == 1
           @inter = worker
+          next
+        end
+
+        # inter carry is capped at 2, so larger 100% is chopper
+        if i == 1 && worker.carry_capacity > 2
+          @chopper = worker
           next
         end
 

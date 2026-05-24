@@ -3255,7 +3255,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
-    context "with seed=8577196129935033000 | Battling zaak for eliminating chance to catch up to me" do
+    context "with seed=8577196129935033000 | Battling ABDERR for eliminating chance to catch up to me" do
       let(:field) do
         <<~FIELD
           ~......#+.0.....
@@ -3308,6 +3308,51 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command for chopper to continue lemon hobbling without returning home despite being full of wood" do
           is_expected.to start_with("MSG hee hee; MOVE 3 5 6;")
+        end
+      end
+
+      context "when chopper chopped opps lemons, so new ones will fruit in 24 turns" do
+        let(:turn) { 67 }
+        let(:input) do
+          <<~INPUT
+            0 0 1 0 1 0
+            6 5 1 4 2 0
+            25
+            PLUM 10 6 4 12 3 0
+            PLUM 5 1 4 12 3 0
+            PLUM 13 5 4 12 3 0
+            PLUM 2 2 4 12 3 0
+            PLUM 3 6 4 12 2 5
+            PLUM 12 1 4 12 3 0
+            LEMON 1 6 4 12 3 3
+            LEMON 14 1 4 12 3 0
+            APPLE 5 3 4 20 3 4
+            APPLE 10 4 4 20 3 0
+            APPLE 5 2 4 20 3 0
+            APPLE 10 5 4 20 3 0
+            BANANA 1 2 4 6 3 0
+            BANANA 14 5 4 6 3 0
+            BANANA 12 2 4 6 3 4
+            BANANA 3 5 4 6 3 0
+            PLUM 5 6 4 12 3 8
+            PLUM 4 6 3 10 0 1
+            BANANA 11 1 3 5 0 1
+            BANANA 11 0 3 5 0 4
+            BANANA 5 5 2 4 0 1
+            BANANA 10 1 2 4 0 2
+            BANANA 9 1 2 4 0 5
+            BANANA 11 2 1 3 0 6
+            LEMON 4 7 1 6 0 8
+            4
+            0 1 4 7 1 1 1 1 0 0 0 0 0 0
+            1 0 11 2 1 1 1 1 0 0 0 0 0 0
+            2 1 6 7 2 2 1 2 0 0 0 0 2 0
+            3 0 3 3 2 3 0 3 0 0 0 0 0 3
+          INPUT
+        end
+
+        it "returns a command for chopper to come drop wood for now" do
+          is_expected.to start_with("MOVE 3 4 2;")
         end
       end
     end
