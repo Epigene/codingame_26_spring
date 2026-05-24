@@ -1926,6 +1926,18 @@ class Controller
     @nodes_within_3_of_camp_except_seed ||= nodes_within_3_of_camp - [seed_node]
   end
 
+  #== OPP nodes ==
+
+  def wet_nodes_within_3_of_opp_camp
+    @wet_nodes_within_3_of_opp_camp ||= nodes_within_3_of_opp_camp & wet_nodes
+  end
+
+  def nodes_within_3_of_opp_camp
+    @nodes_within_3_of_opp_camp ||= grass_nodes.select do |grass_node|
+      shortest_path(opp_camp.node, grass_node).size <= 4
+    end.to_set
+  end
+
   def node_secluded?(node)
     distance_between_camps + 10 < (shortest_path(opp_camp.node, node).size - 1)
   end
