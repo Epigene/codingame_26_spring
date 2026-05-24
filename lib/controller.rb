@@ -1769,13 +1769,17 @@ class Controller
 
         [
           [move, carry, 0, chop],
+          [move, carry, 0, chop + 1],
+          [move, carry, 0, chop + 2],
           next_move_likely ? [move.next, carry, 0, chop] : nil,
           next_carry_likely ? [move, carry.next, 0, chop] : nil,
-          [move, carry, 0, chop.next],
           (next_move_likely && next_carry_likely) ? [move.next, carry.next, 0, chop] : nil,
           next_move_likely ? [move.next, carry, 0, chop.next] : nil,
           next_carry_likely ? [move, carry.next, 0, chop.next] : nil,
-          (next_move_likely && next_carry_likely) ? [move.next, carry.next, 0, chop.next] : nil
+          (next_move_likely && next_carry_likely) ? [move.next, carry.next, 0, chop.next] : nil,
+          next_move_likely ? [move.next, carry, 0, chop + 2] : nil,
+          next_carry_likely ? [move, carry.next, 0, chop + 2] : nil,
+          (next_move_likely && next_carry_likely) ? [move.next, carry.next, 0, chop + 2] : nil
         ].compact
         # not going for 4 carry, its unlikely to pan out
         .reject { |d| d[1] > 3 }.reject { |d| d[3] > 3 }
