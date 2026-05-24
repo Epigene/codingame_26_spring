@@ -1811,27 +1811,9 @@ class Controller
       sorted.each_with_index do |worker, i|
         next @helper = worker if i == 0
 
-        # chopper will amost never have chop power of 1
-        if i == 1 && worker.chop_power == 1
-          @inter = worker
-          next
-        end
-
-        # inter carry is capped at 2, so larger 100% is chopper
-        if i == 1 && worker.carry_capacity > 2
+        # chopper will never have harvest power
+        if i == 1 && worker.harvest_power == 0
           @chopper = worker
-          next
-        end
-
-        # as in we're likely scaling up
-        if i == 1 && my_inventory.iron >= 2
-          @inter = worker
-          next
-        end
-
-        if (use_shortscale? && worker.id > 1) || (worker.harvest_power.zero? && worker.carry_capacity >= 2 && worker.move_speed >= 2 && worker.chop_power >= 2)
-          @chopper = worker
-          next
         else
           @inter = worker
         end
