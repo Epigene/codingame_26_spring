@@ -963,7 +963,10 @@ class Controller
           (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
           (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 2)) ||
           (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 2)) ||
-          (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 30)) ||
+          (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 1)) ||
+          (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 5)) ||
+          (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 5)) ||
+          (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 10)) ||
           (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) ||
           debug("= Huh? inter has nothing to do for scaling to chopper!")
           # (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 20)) ||
@@ -1775,7 +1778,7 @@ class Controller
           (next_move_likely && next_carry_likely) ? [move.next, carry.next, 0, chop.next] : nil
         ].compact
         # not going for 4 carry, its unlikely to pan out
-        .reject { |d| d[1] > 3 }
+        .reject { |d| d[1] > 3 }.reject { |d| d[3] > 3 }
       else # regular full-power variants
         [
           [2, 4, 0, 3], # best
