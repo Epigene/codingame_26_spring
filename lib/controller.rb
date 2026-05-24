@@ -12,6 +12,17 @@ Inventory = Struct.new(:plum, :lemon, :apple, :banana, :iron, :wood) do
     cost_hash.all? { |type, count| send(type.downcase) >= count }
   end
 
+  # @return Integer # no less than 0
+  def missing_for(type, tier, existing_worker_count)
+    cost = tier_cost(tier, existing_worker_count)
+
+    [cost - send(type.downcase), 0].max
+  end
+
+  def tier_cost(tier, existing_worker_count)
+    existing_worker_count + (tier**2)
+  end
+
   def score
     plum + lemon + apple + banana + (4 * wood)
   end
@@ -1662,6 +1673,12 @@ class Controller
     @my_workers[turn] = workers.select(&:my?)
   end
 
+  def opp_workers
+    @opp_workers ||= {}
+    return @opp_workers[turn] if @opp_workers.key?(turn)
+    @opp_workers[turn] = workers.select { !_1.my? }
+  end
+
   def trees_within_3_of_camp
     @trees_within_3_of_camp ||= {}
     return @trees_within_3_of_camp[turn] if @trees_within_3_of_camp.key?(turn)
@@ -1673,10 +1690,9 @@ class Controller
   #===================
 
   def use_shortscale?
-    return @use_shortscale if defined?(@use_shortscale)
+    return false if chopper
 
-
-    @use_shortscale = (wet_nodes_within_3_of_camp.size == 0)
+    (wet_nodes_within_3_of_camp.size == 0)
 
     # || (turn > 10 && wet_nodes_within_3_of_opp_camp.none? { cells[_1]&.tree&.type?("LEMON") } )
 
@@ -1710,7 +1726,7 @@ class Controller
           [move.next, carry.next, 0, chop.next]
         ]
         # not going for 4 carry, its unlikely to pan out
-        .reject { |d| d[1] > 3 }
+        .reject { |d| d[1] > 3 }.reject { |d| d[3] > 3 }
       else # regular full-power variants
         [
           [2, 4, 0, 3], # best
@@ -1760,6 +1776,11 @@ class Controller
       @cells["#{x} #{y}"] ||= Cell.new(x, y)
       @cells["#{x} #{y}"].tree = tree
     end
+
+    # clearing before each move
+    @helper = nil
+    @inter = nil
+    @chopper = nil
 
     @workers = []
     lines.shift.to_i.times do
