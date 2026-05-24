@@ -296,6 +296,27 @@ Prediction = Struct.new(:move, :carry, :harvest, :chop, :costs, :turns, :remaini
     "#{move} #{carry} #{harvest} #{chop}"
   end
 
+  # This reduces weakness to opp's intereference.
+  # Especially guards against leaping from 9 to 16 lemons without having any plums at all
+  # @return Array<Array<Integer>>
+  def satisfyable_tiers(existing_worker_count)
+    (1..move).flat_map do |m|
+      (1..carry).flat_map do |c|
+        (1..chop).map do |ch|
+          [m, c, existing_worker_count, ch]
+        end
+      end
+    end.sort_by! do |m, c, ch|
+      [
+        [m, c, ch].sum, # tier by highest value present
+        [m, c, ch].max,
+        ch,             # then whatever secondary ordering you want
+        m,
+        c
+      ]
+    end
+  end
+
   # Exponential scaling makes faraway turns be more punishing than near ones
   def turn_adjusted_value
     (grand_total - 0.15*(turns**1.25)).round
@@ -464,11 +485,6 @@ class Controller
     end
   end
 
-  # relies on @best_prediction having been set
-  def aimed_chopper_cost
-    best_prediction.costs
-  end
-
   def organize_chopping(worker)
     # 0. unload if carrying wood for some reason
     if (trees.any?(&:grown?) ? worker.carry_wood.positive? : worker.full?) || (worker.full? && worker.carry_iron.positive?)
@@ -635,25 +651,36 @@ class Controller
     if use_shortscale? && chopper.nil? && best_prediction
       debug("- helper will SHORTscale to #{best_prediction.name}")
 
-      harvest_already_stood_on_tree(
-          worker,
-          *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
-        ) ||
-        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
-        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
-        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_initial_fruit(worker, "APPLE", 2)) ||
-        (my_inventory.iron < aimed_chopper_cost["IRON"] && inter.nil? && gather_iron(worker)) ||
-        (
-          my_inventory.lemon >= aimed_chopper_cost["LEMON"] && my_inventory.plum >= aimed_chopper_cost["PLUM"] &&
-            gather_iron(worker)
-        ) ||
-        (inter && (turns_till_chopper < 15) && seek_to_plant_banana(worker)) ||
-        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 10)) ||
-        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 10)) ||
-        (my_inventory.apple < aimed_chopper_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 10)) ||
-        (my_inventory.lemon < aimed_chopper_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 10)) ||
-        (my_inventory.plum < aimed_chopper_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 10)) ||
-        (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker)) # TODO, may need to detect inter already grabbing last piece
+      # Too risky, need to maintain tiered gather approach
+      # harvest_already_stood_on_tree(
+      #   worker,
+      #   *[(my_inventory.lemon < aimed_chopper_cost["LEMON"] ? "LEMON" : nil), (my_inventory.plum < aimed_chopper_cost["PLUM"] ? "PLUM" : nil)].compact
+      # )
+
+      best_prediction.satisfyable_tiers(my_workers.size).each do |tier_data|
+        # == next if tier already gathered ==
+        tier_cost = worker_cost(*tier_data)
+        next if my_inventory.can_afford?(tier_cost.except("IRON"))
+        # ==
+
+        (my_inventory.lemon < tier_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 1)) ||
+        (my_inventory.plum < tier_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 1)) ||
+        (my_inventory.lemon < tier_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 5)) ||
+        (my_inventory.plum < tier_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 5)) ||
+        (my_inventory.apple < tier_cost["APPLE"] && gather_initial_fruit(worker, "APPLE", 2)) ||
+        (my_inventory.lemon < tier_cost["LEMON"] && gather_initial_fruit(worker, "LEMON", 8)) ||
+        (my_inventory.plum < tier_cost["PLUM"] && gather_initial_fruit(worker, "PLUM", 8)) ||
+        (my_inventory.apple < tier_cost["APPLE"] && gather_initial_fruit(worker, "APPLE", 4)) ||
+        (my_inventory.lemon < tier_cost["LEMON"] && gather_anywhere_fruit(worker, "LEMON", 10)) ||
+        (my_inventory.plum < tier_cost["PLUM"] && gather_anywhere_fruit(worker, "PLUM", 10)) ||
+        (my_inventory.apple < tier_cost["APPLE"] && gather_anywhere_fruit(worker, "APPLE", 10))
+
+        break if plans[worker.id]
+      end
+      return if plans[worker.id]
+
+      # TODO, may need to detect inter already grabbing last piece
+      (my_inventory.iron < aimed_chopper_cost["IRON"] && gather_iron(worker))
     end
     return if plans[worker.id]
 
@@ -874,7 +901,7 @@ class Controller
 
     xms("> inter chopper scaling") do
       if chopper.nil? && !training.to_s.match?(%r'TRAIN \d+ \d+ 0') && best_prediction
-        debug("== inter helping scale to chopper")
+        debug("- inter helping scale to chopper")
 
         (my_inventory.lemon.zero? && trees_within_3_of_camp.none? { _1.type?("LEMON") } && gather_and_plant(worker, "LEMON")) ||
           (my_inventory.plum.zero? && trees_within_3_of_camp.none? { _1.type?("PLUM") } && gather_and_plant(worker, "PLUM")) ||
@@ -937,6 +964,11 @@ class Controller
     debug("XX hmm, inter has nothing to do")
 
     # TODO, have inter live on opp base corner to be abel to steal
+  end
+
+  # relies on @best_prediction having been set
+  def aimed_chopper_cost
+    best_prediction.costs
   end
 
   # Regular harvesting for inter, but chopping is preferred
@@ -1631,8 +1663,11 @@ class Controller
   def use_shortscale?
     return @use_shortscale if defined?(@use_shortscale)
 
-    # TODO, gotta see how neightbor limit affects score
-    @use_shortscale = (wet_nodes_within_3_of_camp.size == 0) #|| (grid.neighbors(my_camp.node).size == 1)
+    @use_shortscale = (wet_nodes_within_3_of_camp.size == 0) ||
+      (turn > 10 && wet_nodes_within_3_of_opp_camp.none? { cells[_1]&.tree&.type?("LEMON") } )
+
+     # TODO, gotta see how neighbor limit affects score
+    #|| (grid.neighbors(my_camp.node).size == 1)
   end
 
   # Predictions for which chopper to aim for.
@@ -1642,9 +1677,12 @@ class Controller
 
     variants =
       if use_shortscale?
-        move = my_inventory.best_affordable_train_tier("PLUM", 3, _existing = 1)
-        carry = my_inventory.best_affordable_train_tier("LEMON", 3, _existing = 1)
-        chop = my_inventory.best_affordable_train_tier("IRON", 3, _existing = 1)
+        existing = my_workers.size
+
+        move = my_inventory.best_affordable_train_tier("PLUM", 3, existing)
+        carry = my_inventory.best_affordable_train_tier("LEMON", 3, existing)
+        # chop needs to be at least as strong as opp's
+        chop = workers.select { !_1.my? }.map(&:chop_power).max
 
         # from current situation all combos of scaling up a bit
         [
@@ -1734,9 +1772,21 @@ class Controller
       @helper = sorted.first
       @inter = sorted[1]
       @chopper = sorted[2]
-    else
+    else # having some trouble differentiating chopper from inter.
       sorted.each_with_index do |worker, i|
         next @helper = worker if i == 0
+
+        # chopper will amost never have chop power of 1
+        if i == 1 && worker.chop_power == 1
+          @inter = worker
+          next
+        end
+
+        # as in we're likely scaling up
+        if i == 1 && my_inventory.iron >= 2
+          @inter = worker
+          next
+        end
 
         if (use_shortscale? && worker.id > 1) || (worker.harvest_power.zero? && worker.carry_capacity >= 2 && worker.move_speed >= 2 && worker.chop_power >= 2)
           @chopper = worker
@@ -1792,9 +1842,9 @@ class Controller
     end
 
     ms(">> wet node init") { wet_nodes_within_3_of_camp }
-    ms(">> seed note init") { seed_node }
+    ms(">> INIT opp node") { nodes_within_3_of_opp_camp }
 
-    ms(">> #my_nodes init") do
+    ms(">> INIT #my_nodes") do
       grass_nodes.each do |grass_node|
         my_path = shortest_path(my_camp.node, grass_node).size - 1
         opp_path = shortest_path(opp_camp.node, grass_node).size - 1
@@ -1806,6 +1856,8 @@ class Controller
     end
 
     return if init_time_remaining < 2
+
+    ms(">> seed note init") { seed_node }
 
     #===
     # return if defined?(LOCAL)

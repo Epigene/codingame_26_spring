@@ -3173,7 +3173,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       context "when yaichi has come across to chopp our lemon and has none of his own" do
-        let(:turn) { 1 }
+        let(:turn) { 36 }
         let(:input) do
           <<~INPUT
             5 7 2 6 3 0
@@ -3208,6 +3208,49 @@ RSpec.describe Controller, instance_name: :controller do
 
         it "returns a command for helper to ignore lemons, we need plums (and apples)" do
           is_expected.to start_with("MSG trns till PLUM 2; MOVE 0 10 8;")
+          # we already have enough lemons, just need 2 plums, an apple, and some iron
+          expect(controller.send(:best_prediction)&.name).to eq("2 3 0 3")
+        end
+      end
+
+      context "when yaichi has come across to chopp our lemon and has none of his own" do
+        let(:turn) { 45 }
+        let(:input) do
+          <<~INPUT
+            7 7 2 6 3 1
+            2 3 6 1 0 0
+            21
+            PLUM 6 6 4 12 1 7
+            PLUM 13 3 4 12 3 0
+            LEMON 6 2 4 12 3 0
+            LEMON 13 7 4 10 3 0
+            APPLE 11 2 4 20 3 0
+            APPLE 8 7 4 20 3 0
+            APPLE 0 2 4 20 3 0
+            APPLE 19 7 4 20 3 0
+            APPLE 12 6 4 20 3 0
+            APPLE 7 3 4 20 3 0
+            BANANA 1 6 4 6 3 0
+            BANANA 18 3 4 6 3 0
+            BANANA 7 9 4 6 3 0
+            BANANA 12 0 4 6 3 0
+            BANANA 12 4 4 6 3 0
+            BANANA 7 5 4 6 3 0
+            PLUM 10 8 4 12 3 0
+            BANANA 11 0 2 4 0 1
+            BANANA 11 1 2 4 0 4
+            BANANA 10 1 1 3 0 1
+            BANANA 9 1 1 3 0 2
+            4
+            0 0 10 7 1 1 1 1 0 0 0 0 0 0
+            1 1 9 0 1 1 1 1 0 0 0 1 0 0
+            2 0 4 7 2 2 2 1 0 0 0 0 1 0
+            3 1 13 7 2 2 0 2 0 0 0 0 0 2
+          INPUT
+        end
+
+        it "returns a command for helper to ignore lemons, we need 1 apple" do
+          is_expected.to start_with("MSG trns till APPLE 3; MOVE 0 9 7;")
         end
       end
     end
